@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from tkinter import *
-from tkinter.filedialog import askopenfilename
+from tkinter.filedialog import *
+from tkinter.messagebox import *
 import sys
 import xml.etree.ElementTree as ET
 
@@ -289,11 +290,13 @@ class PropsFrame(Frame):
 class MainWindow:
 	def __init__(self, master):
 		# FIXME: read params from xml...
+		self.cur_filename = None
+		self.modified = False
 		self.layout = Layout(64, 4)
 		master.wm_geometry("800x600+0+0")
 		self.master = master
-		menu = MainMenu(master)
-		master.config(menu = menu)
+		self.menu = MainMenu(master, self.on_menu_action)
+		master.config(menu = self.menu)
 
 		self.toolbar = Frame(master, bd = 1, relief = RAISED)
 		self.toolbar.pack(side = TOP, fill = X)
@@ -375,6 +378,9 @@ class MainWindow:
 		kd = self.props.get_keydef()
 		self.kbframe.update_button(self.kbframe.get_current_btn(), kd)
 		self.layout[self.layer.get(), self.kbframe.get_current_btn()] = kd
+		self.modified = True
+		if self.cur_filename is not None:
+			self.menu.set_save_state(True)
 
 	def on_change_layer(self, l):
 		# FIXME: take that from xml
@@ -389,24 +395,83 @@ class MainWindow:
 		if sys.platform.startswith("win"):
 			for b in self.kbframe.buttons.values():
 				b.do_layout()
+
+	def on_menu_action(self, cmd):
+		if cmd == "saveas":
+			fname = asksaveasfilename(filetypes =
+					(("Keyboard layout files", "*.lay"), ("All files", "*.*"))
+			)
+			if fname == "":
+				return
+			try:
+				f = open(fname, "wb")
+				f.write(self.layout.binary())
+				f.close()
+				self.status.set("Saved as: %s.", fname)
+				self.cur_filename = fname
+				self.menu.set_save_state(False)
+				self.modified = False
+			except:
+				self.status.set("Failed to write file: %s!", fname)
+		elif cmd == "save":
+			f = open(self.cur_filename, "wb")
+			f.write(self.layout.binary())
+			f.close()
+			self.status.set("Saved.")
+			self.menu.set_save_state(False)
+			self.modified = False
+		elif cmd == "open":
+			fname = askopenfilename(filetypes =
+					(("Keyboard layout files", "*.lay"), ("All files", "*.*"))
+			)
+			if fname == "":
+				return
+			try:
+				f = open(fname, "rb")
+				f.read()
+			except:
+				pass
+		elif cmd == "exit":
+			if self.modified:
+				ans = askyesnocancel("Close", "Save modified layout?")
+				if ans is None:
+					return
+				elif ans and self.cur_filename is not None:
+					self.on_menu_action("save")
+				elif ans and self.cur_filename is None:
+					self.on_menu_action("saveas")
+			self.master.destroy()
+
+
 class MainMenu(Menu):
-	def __init__(self, master):
+	def __init__(self, master, command):
 		super(MainMenu, self).__init__(master)
 
-		filemenu = Menu(self)
-		self.add_cascade(label = "File", menu = filemenu)
-		filemenu.add_command(label = "New", command = self.callback)
-		filemenu.add_command(label = "Open...", command = self.callback)
-		filemenu.add_separator()
-		filemenu.add_command(label = "Exit", command = self.callback)
+		self.filemenu = Menu(self, tearoff = False)
+		self.add_cascade(label = "File", menu = self.filemenu)
+		self.filemenu.add_command(label = "New", command = self.callback)
+		self.filemenu.add_command(label = "Open...", command = lambda: command("open"))
+		self.filemenu.add_command(label = "Save", command = lambda: command("save"))
+		self.filemenu.add_command(label = "Save as...", command = lambda: command("saveas"))
+		self.filemenu.add_separator()
+		self.filemenu.add_command(label = "Exit", command = lambda: command("exit"))
+		self.set_save_state(False)
 
-		helpmenu = Menu(self)
+		helpmenu = Menu(self, tearoff = False)
 		self.add_cascade(label = "Help", menu = helpmenu)
 		helpmenu.add_command(label = "About...", command = self.callback)
 
 	def callback(self):
-		f = askopenfilename(filetypes=(("Keyboard layout files", "*.lay"), ("All files", "*.*")))
-		print(f)
+		pass
+
+	# Public API starts here...
+
+	def set_save_state(self, st):
+		if st:
+			self.filemenu.entryconfig(2, state = NORMAL)
+		else:
+			self.filemenu.entryconfig(2, state = DISABLED)
+
 
 class StatusBar(Frame):
 	def __init__(self, master):
