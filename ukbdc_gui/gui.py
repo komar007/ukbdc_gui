@@ -6,6 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from ukbdc_lib.layout import *
+from ukbdc_lib.ukbdc import UKBDC
 
 class KeyButton(Button):
 	hicolor = "lightgreen"
@@ -298,15 +299,13 @@ class MainWindow:
 		self.menu = MainMenu(master, self.on_menu_action)
 		master.config(menu = self.menu)
 
-		self.toolbar = Frame(master, bd = 1, relief = RAISED)
-		self.toolbar.pack(side = TOP, fill = X)
-		b = Button(self.toolbar, text = "new", width = 6, command = self.callback)
-		b.pack(side = LEFT, padx = 1, pady = 1)
-		b = Button(self.toolbar, text = "open", width = 6, command = self.callback)
-		b.pack(side = LEFT, padx = 1, pady = 1)
+		topbar = Frame(master, bd = 1, relief = RAISED)
+		topbar.pack(side = TOP, fill = X)
+		self.toolbar = Toolbar(topbar, self.on_menu_action)
+		self.toolbar.pack(side = LEFT)
 		self.layer = IntVar(master)
 		self.layer.set(0)
-		fr = Frame(self.toolbar)
+		fr = Frame(topbar)
 		fr.pack(side = RIGHT, padx = 1, pady = 1)
 		l = Label(fr, text = "Layer: ")
 		l.grid(column = 0, row = 0)
@@ -366,6 +365,10 @@ class MainWindow:
 	def callback(self):
 		self.status.set("hello, %i", 4)
 
+	def set_save_state(self, st):
+		self.menu.set_save_state(st)
+		self.toolbar.set_save_state(st)
+
 	def on_key_chosen(self, no):
 		if no is None:
 			self.props.pack_forget()
@@ -379,8 +382,9 @@ class MainWindow:
 		self.kbframe.update_button(self.kbframe.get_current_btn(), kd)
 		self.layout[self.layer.get(), self.kbframe.get_current_btn()] = kd
 		self.modified = True
+		self.status.set("Layout modified")
 		if self.cur_filename is not None:
-			self.menu.set_save_state(True)
+			self.set_save_state(True)
 
 	def on_change_layer(self, l):
 		# FIXME: take that from xml
@@ -409,7 +413,7 @@ class MainWindow:
 				f.close()
 				self.status.set("Saved as: %s.", fname)
 				self.cur_filename = fname
-				self.menu.set_save_state(False)
+				self.set_save_state(False)
 				self.modified = False
 			except:
 				self.status.set("Failed to write file: %s!", fname)
@@ -418,9 +422,13 @@ class MainWindow:
 			f.write(self.layout.binary())
 			f.close()
 			self.status.set("Saved.")
-			self.menu.set_save_state(False)
+			self.set_save_state(False)
 			self.modified = False
 		elif cmd == "open":
+			if self.modified:
+				cont = self.ask_save()
+				if not cont:
+					return
 			fname = askopenfilename(filetypes =
 					(("Keyboard layout files", "*.lay"), ("All files", "*.*"))
 			)
@@ -428,19 +436,53 @@ class MainWindow:
 				return
 			try:
 				f = open(fname, "rb")
-				f.read()
-			except:
-				pass
+				data = f.read()
+				self.layout = Layout.from_binary(data)
+				self.layer.set(0)
+				self.on_change_layer(0)
+				self.cur_filename = fname
+				self.set_save_state(False)
+				self.status.set("Opened file: %s", fname)
+			except Exception as e:
+				self.status.set("Error opening file: %s", str(e))
+		elif cmd == "new":
+			if self.modified:
+				cont = self.ask_save()
+				if not cont:
+					return
+			# FIXME: take that from xml
+			self.layout = Layout(64, 4)
+			self.layer.set(0)
+			self.on_change_layer(0)
+			self.cur_filename = None
+			self.set_save_state(False)
+			self.status.set("Created new layout")
 		elif cmd == "exit":
 			if self.modified:
-				ans = askyesnocancel("Close", "Save modified layout?")
-				if ans is None:
+				cont = self.ask_save()
+				if not cont:
 					return
-				elif ans and self.cur_filename is not None:
-					self.on_menu_action("save")
-				elif ans and self.cur_filename is None:
-					self.on_menu_action("saveas")
 			self.master.destroy()
+		elif cmd == "program":
+			u = UKBDC()
+			try:
+				binary = self.layout.binary()
+				u.attach()
+				u.program_layout(binary)
+				u.detach()
+				self.status.set("Programmed %i bytes of layout", len(binary))
+			except Exception as e:
+				self.status.set("Programming error: %s", str(e))
+
+	def ask_save(self):
+		ans = askyesnocancel("Close", "Save modified layout?")
+		if ans is None:
+			return False
+		elif ans and self.cur_filename is not None:
+			self.on_menu_action("save")
+		elif ans and self.cur_filename is None:
+			self.on_menu_action("saveas")
+		return True
 
 
 class MainMenu(Menu):
@@ -449,7 +491,7 @@ class MainMenu(Menu):
 
 		self.filemenu = Menu(self, tearoff = False)
 		self.add_cascade(label = "File", menu = self.filemenu)
-		self.filemenu.add_command(label = "New", command = self.callback)
+		self.filemenu.add_command(label = "New", command = lambda: command("new"))
 		self.filemenu.add_command(label = "Open...", command = lambda: command("open"))
 		self.filemenu.add_command(label = "Save", command = lambda: command("save"))
 		self.filemenu.add_command(label = "Save as...", command = lambda: command("saveas"))
@@ -457,12 +499,13 @@ class MainMenu(Menu):
 		self.filemenu.add_command(label = "Exit", command = lambda: command("exit"))
 		self.set_save_state(False)
 
+		devmenu = Menu(self, tearoff = False)
+		self.add_cascade(label = "Device", menu = devmenu)
+		devmenu.add_command(label = "Program", command = lambda: command("program"))
+
 		helpmenu = Menu(self, tearoff = False)
 		self.add_cascade(label = "Help", menu = helpmenu)
-		helpmenu.add_command(label = "About...", command = self.callback)
-
-	def callback(self):
-		pass
+		helpmenu.add_command(label = "About...", command = lambda: command("about"))
 
 	# Public API starts here...
 
@@ -471,6 +514,21 @@ class MainMenu(Menu):
 			self.filemenu.entryconfig(2, state = NORMAL)
 		else:
 			self.filemenu.entryconfig(2, state = DISABLED)
+
+class Toolbar(Frame):
+	def __init__(self, master, command):
+		super(Toolbar, self).__init__(master)
+		self.save = Button(self, text = "save", width = 3, command = lambda: command("save"))
+		self.save.pack(side = LEFT, padx = 1, pady = 1)
+		b = Button(self, text = "program", width = 6, command = lambda: command("program"))
+		b.pack(side = LEFT, padx = 1, pady = 1)
+		self.set_save_state(False)
+
+	def set_save_state(self, st):
+		if st:
+			self.save.config(state = NORMAL)
+		else:
+			self.save.config(state = DISABLED)
 
 
 class StatusBar(Frame):
