@@ -1,5 +1,6 @@
 from ctypes import c_uint8
 from copy import copy
+from .mnemonics import mnemonics, scancodes
 
 def as_signed(x):
 	if x < 128:
@@ -24,7 +25,10 @@ class Abs(Action):
 
 class KeyDef(object):
 	def __init__(self, scancode, press = None, release = None):
-		self.scancode = scancode
+		if type(scancode) is int:
+			self.scancode = scancode
+		else:
+			self.scancode = scancodes[scancode]
 		if press is not None:
 			self.press = press
 		else:
@@ -38,6 +42,13 @@ class KeyDef(object):
 		actions = (self.press.kind << 4) + self.release.kind
 		fields = [self.scancode, actions, self.press.arg, self.release.arg]
 		return b''.join(map(lambda x: bytes(c_uint8(x)), fields))
+
+	@property
+	def nicename(self):
+		try:
+			return mnemonics[self.scancode]
+		except KeyError:
+			return hex(self.scancode)
 
 class Layout(object):
 	def __init__(self, no_keys = None, no_layers = None):
