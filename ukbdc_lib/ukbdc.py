@@ -55,6 +55,10 @@ class Dfu(Message):
 
 class WritePage(Message):
 	def __init__(self, page_addr, page):
+		if len(page) < 128:
+			page += bytes([0] * (128-len(page)))
+		elif len(page) > 128:
+			raise ValueError("page too long")
 		payload = bytes(c_uint8(page_addr)) + page
 		super(WritePage, self).__init__(0x01, payload)
 
@@ -75,6 +79,25 @@ class Status(object):
 	MESSAGE_ERROR		= 6
 	BUSY_ERROR		= 7
 	WRONG_MESSAGE_ERROR	= 8
+
+	@classmethod
+	def name(self, st):
+		if st == self.IDLE:
+			return "idle"
+		elif st == self.UNEXPECTED_CONT_ERROR:
+			return "unexpected cont packet"
+		elif st == self.CRC_ERROR:
+			return "crc error"
+		elif st == self.RECEIVING_MESSAGE:
+			return "receiving message"
+		elif st == self.EXECUTING:
+			return "executing"
+		elif st == self.MESSAGE_ERROR:
+			return "message error (malformed)"
+		elif st == self.BUSY_ERROR:
+			return "requested operation while device busy"
+		elif st == self.WRONG_MESSAGE_ERROR:
+			return "unknown message received"
 
 class UKBDC(object):
 	vendorId = 0x16c0
@@ -139,4 +162,7 @@ class UKBDC(object):
 			self.send(m)
 			while self.status() == Status.EXECUTING:
 				pass
+			s = self.status()
+			if s != Status.IDLE:
+				raise RuntimeError("device returned status: %s" % Status.name(s))
 		self.send(ActivateLayout())
