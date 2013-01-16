@@ -1,6 +1,12 @@
 from ctypes import c_uint8
 from copy import copy
 
+def as_signed(x):
+	if x < 128:
+		return x
+	else:
+		return x - 256
+
 class Action(object):
 	Abs = 0x02
 	Rel = 0x01
@@ -34,7 +40,9 @@ class KeyDef(object):
 		return b''.join(map(lambda x: bytes(c_uint8(x)), fields))
 
 class Layout(object):
-	def __init__(self, no_keys, no_layers):
+	def __init__(self, no_keys = None, no_layers = None):
+		if no_keys is None or no_layers is None:
+			return
 		self.no_keys = no_keys
 		self.no_layers = no_layers
 		self.layers = []
@@ -54,3 +62,21 @@ class Layout(object):
 		hdr = bytes(c_uint8(self.no_keys)) + bytes(c_uint8(self.no_layers))
 		l = b''.join(map(lambda x: b''.join(map(lambda x: x.binary(), x)), self.layers))
 		return hdr + l
+
+	@staticmethod
+	def from_binary(data):
+		l = Layout()
+		l.no_keys, l.no_layers, *rest = data
+		lay_size = 4 * l.no_keys
+		layers = [rest[i*lay_size:(i+1)*lay_size] for i in range(0, l.no_layers)]
+		l.layers = []
+		for lay in layers:
+			layer = []
+			binlay = [lay[i*4:(i+1)*4] for i in range(0, l.no_keys)]
+			for binkd in binlay:
+				pr = Action(binkd[1] >> 4, as_signed(binkd[2]))
+				re = Action(binkd[1] & 0x0f, as_signed(binkd[3]))
+				kd = KeyDef(binkd[0], pr, re)
+				layer.append(kd)
+			l.layers.append(layer)
+		return l
