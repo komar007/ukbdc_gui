@@ -42,27 +42,30 @@
 	<key x="78"  y="16" width="8"  height="8" id="37"/>
 	<key x="86"  y="16" width="8"  height="8" id="38"/>
 	<key x="94"  y="16" width="8"  height="8" id="39"/>
-	<key x="102" y="16" width="18" height="8" id="40"/>
+	<!-- here goes ISO key to the left from enter -->
+	<key x="102" y="16" width="18" height="8" id="41"/>
 
-	<key x="0"   y="24" width="18" height="8" id="41"/>
-	<key x="18"  y="24" width="8"  height="8" id="42"/>
-	<key x="26"  y="24" width="8"  height="8" id="43"/>
-	<key x="34"  y="24" width="8"  height="8" id="44"/>
-	<key x="42"  y="24" width="8"  height="8" id="45"/>
-	<key x="50"  y="24" width="8"  height="8" id="46"/>
-	<key x="58"  y="24" width="8"  height="8" id="47"/>
-	<key x="66"  y="24" width="8"  height="8" id="48"/>
-	<key x="74"  y="24" width="8"  height="8" id="49"/>
-	<key x="82"  y="24" width="8"  height="8" id="50"/>
-	<key x="90"  y="24" width="8"  height="8" id="51"/>
-	<key x="98"  y="24" width="22" height="8" id="52"/>
+	<key x="0"   y="24" width="18" height="8" id="42"/>
+	<!-- here goes extra "fn" key after lshift -->
+	<key x="18"  y="24" width="8"  height="8" id="44"/>
+	<key x="26"  y="24" width="8"  height="8" id="45"/>
+	<key x="34"  y="24" width="8"  height="8" id="46"/>
+	<key x="42"  y="24" width="8"  height="8" id="47"/>
+	<key x="50"  y="24" width="8"  height="8" id="48"/>
+	<key x="58"  y="24" width="8"  height="8" id="49"/>
+	<key x="66"  y="24" width="8"  height="8" id="50"/>
+	<key x="74"  y="24" width="8"  height="8" id="51"/>
+	<key x="82"  y="24" width="8"  height="8" id="52"/>
+	<key x="90"  y="24" width="8"  height="8" id="53"/>
+	<!-- here goes extra "fn" key after or befor rshift -->
+	<key x="98"  y="24" width="22" height="8" id="55"/>
 
-	<key x="0"   y="32" width="10" height="8" id="53"/>
-	<key x="10"  y="32" width="10" height="8" id="54"/>
-	<key x="20"  y="32" width="10" height="8" id="55"/>
-	<key x="30"  y="32" width="50" height="8" id="56"/>
-	<key x="80"  y="32" width="10" height="8" id="57"/>
-	<key x="90"  y="32" width="10" height="8" id="58"/>
-	<key x="100" y="32" width="10" height="8" id="59"/>
-	<key x="110" y="32" width="10" height="8" id="60"/>
+	<key x="0"   y="32" width="10" height="8" id="56"/>
+	<key x="10"  y="32" width="10" height="8" id="57"/>
+	<key x="20"  y="32" width="10" height="8" id="58"/>
+	<key x="30"  y="32" width="50" height="8" id="59"/>
+	<key x="80"  y="32" width="10" height="8" id="60"/>
+	<key x="90"  y="32" width="10" height="8" id="61"/>
+	<key x="100" y="32" width="10" height="8" id="62"/>
+	<key x="110" y="32" width="10" height="8" id="63"/>
 </keyboard>
