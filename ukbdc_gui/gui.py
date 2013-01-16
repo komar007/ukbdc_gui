@@ -533,7 +533,7 @@ class Toolbar(Frame):
 		super(Toolbar, self).__init__(master)
 		self.set_tip = set_tip
 
-		img = PhotoImage(file = "icons/stock_save.gif")
+		img = PhotoImage(file = "icons/save.gif")
 		self.save = Button(self,
 				text = "save", image = img,
 				command = lambda: command("save")
