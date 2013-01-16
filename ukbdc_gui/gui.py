@@ -301,7 +301,7 @@ class MainWindow:
 
 		topbar = Frame(master, bd = 1, relief = RAISED)
 		topbar.pack(side = TOP, fill = X)
-		self.toolbar = Toolbar(topbar, self.on_menu_action)
+		self.toolbar = Toolbar(topbar, self.on_menu_action, self.set_tip)
 		self.toolbar.pack(side = LEFT)
 		self.layer = IntVar(master)
 		self.layer.set(0)
@@ -312,25 +312,27 @@ class MainWindow:
 		ls = OptionMenu(fr, self.layer, *range(0, 16), command = self.on_change_layer)
 		ls.grid(column = 1, row = 0)
 
-		self.mainframe = Frame(master, relief = GROOVE)
-		self.mainframe.pack(side = TOP, fill = BOTH, expand = True)
-
 		self.status = StatusBar(master)
 		self.status.pack(side = BOTTOM, fill = X)
 
-		self.split = 0.7
-		self.topframe = Frame(self.mainframe, bd = 1, relief = FLAT)
+		self.topframe = Frame(master, bd = 1, relief = FLAT)
 		self.topframe.bind("<Configure>", self.configure_event)
-		self.bottomframe = Frame(self.mainframe, bd = 1, relief = SUNKEN)
-		self.adjuster = Frame(self.mainframe, bd = 2, relief = RAISED, width = 8, height = 8)
-		self.adjuster.bind("<B1-Motion>", self.adjust)
-		self.place_frames()
+		self.bottomframe = Frame(master, bd = 1, relief = SUNKEN)
+
+		self.topframe.pack(side = TOP, fill = BOTH, expand = True)
+		self.bottomframe.pack(side = BOTTOM, fill = BOTH)
 
 		self.kbframe = KeyboardFrame(self.topframe, self.on_key_chosen)
 		self.kbframe.load_xml("gh60.xml")
 
 		self.props = PropsFrame(self.bottomframe, self.on_props_changed)
 		self.on_change_layer(self.layer.get())
+
+	def set_tip(self, tip):
+		if tip is None:
+			self.status.clear_tip()
+		else:
+			self.status.set_tip(tip)
 
 	def configure_event(self, event):
 		ratio = float(self.kbframe.kwidth) / self.kbframe.kheight
@@ -352,18 +354,11 @@ class MainWindow:
 		self.bottomframe.place(rely = self.split, relheight = 1.0-self.split, relwidth = 1)
 		self.adjuster.place(relx = 0.9, rely = self.split, anchor = E)
 
-	def adjust(self, event):
-		height = self.topframe.winfo_height() + self.bottomframe.winfo_height()
-		split = self.split + float(event.y) / height
-		if split > 0.3 and split < 0.9:
-			self.split = split
-			self.place_frames()
-
 	def say_hi(self):
 		print("hi there, everyone!")
 
 	def callback(self):
-		self.status.set("hello, %i", 4)
+		self.status.set("hello, %i" % 4)
 
 	def set_save_state(self, st):
 		self.menu.set_save_state(st)
@@ -411,12 +406,12 @@ class MainWindow:
 				f = open(fname, "wb")
 				f.write(self.layout.binary())
 				f.close()
-				self.status.set("Saved as: %s.", fname)
+				self.status.set("Saved as: %s." % fname)
 				self.cur_filename = fname
 				self.set_save_state(False)
 				self.modified = False
 			except:
-				self.status.set("Failed to write file: %s!", fname)
+				self.status.set("Failed to write file: %s!" % fname)
 		elif cmd == "save":
 			f = open(self.cur_filename, "wb")
 			f.write(self.layout.binary())
@@ -442,9 +437,9 @@ class MainWindow:
 				self.on_change_layer(0)
 				self.cur_filename = fname
 				self.set_save_state(False)
-				self.status.set("Opened file: %s", fname)
+				self.status.set("Opened file: %s" % fname)
 			except Exception as e:
-				self.status.set("Error opening file: %s", str(e))
+				self.status.set("Error opening file: %s" % str(e))
 		elif cmd == "new":
 			if self.modified:
 				cont = self.ask_save()
@@ -470,9 +465,9 @@ class MainWindow:
 				u.attach()
 				u.program_layout(binary)
 				u.detach()
-				self.status.set("Programmed %i bytes of layout", len(binary))
+				self.status.set("Programmed %i bytes of layout" % len(binary))
 			except Exception as e:
-				self.status.set("Programming error: %s", str(e))
+				self.status.set("Programming error: %s" % str(e))
 
 	def ask_save(self):
 		ans = askyesnocancel("Close", "Save modified layout?")
@@ -516,13 +511,37 @@ class MainMenu(Menu):
 			self.filemenu.entryconfig(2, state = DISABLED)
 
 class Toolbar(Frame):
-	def __init__(self, master, command):
+	def __init__(self, master, command, set_tip):
 		super(Toolbar, self).__init__(master)
-		self.save = Button(self, text = "save", width = 3, command = lambda: command("save"))
+		self.set_tip = set_tip
+
+		img = PhotoImage(file = "icons/stock_save.gif")
+		self.save = Button(self,
+				text = "save", image = img,
+				command = lambda: command("save")
+		)
+		self.save.tooltip = "Save current layout"
+		self.save.bind("<Enter>", self.on_enter)
+		self.save.bind("<Leave>", self.on_leave)
+		self.save.img = img
 		self.save.pack(side = LEFT, padx = 1, pady = 1)
-		b = Button(self, text = "program", width = 6, command = lambda: command("program"))
-		b.pack(side = LEFT, padx = 1, pady = 1)
+		img = PhotoImage(file = "icons/program.gif")
+		self.program = Button(self,
+				text = "program", image = img,
+				command = lambda: command("program")
+		)
+		self.program.tooltip = "write layout to device"
+		self.program.bind("<Enter>", self.on_enter)
+		self.program.bind("<Leave>", self.on_leave)
+		self.program.img = img
+		self.program.pack(side = LEFT, padx = 1, pady = 1)
 		self.set_save_state(False)
+
+	def on_enter(self, event):
+		self.set_tip(event.widget.tooltip)
+
+	def on_leave(self, event):
+		self.set_tip(None)
 
 	def set_save_state(self, st):
 		if st:
@@ -535,15 +554,22 @@ class StatusBar(Frame):
 	def __init__(self, master):
 		Frame.__init__(self, master)
 		self.label = Label(self, bd = 1, relief = SUNKEN, anchor = W)
-		self.label.pack(fill = X)
+		self.label.pack(side = LEFT, fill = BOTH, expand = True)
+		self.last_status = ""
 
-	def set(self, format, *args):
-		self.label.config(text = format % args)
-		self.label.update_idletasks()
+	def set(self, status):
+		self.last_status = status
+		self.label.config(text = status)
+
+	def set_tip(self, tip):
+		self.label.config(text = "Tip: " + tip)
+
+	def clear_tip(self):
+		self.label.config(text = self.last_status)
 
 	def clear(self):
 		self.label.config(text = "")
-		self.label.update_idletasks()
+		self.last_status = ""
 
 root = Tk()
 
