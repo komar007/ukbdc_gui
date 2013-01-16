@@ -114,16 +114,10 @@ class KeyboardFrame(Frame):
 		master.bind("<Button-1>", self.on_click_nothing)
 
 	def on_button_pressed(self, button):
-		if self.cur_button is not None:
-			self.cur_button.dehighlight()
-		self.cur_button = button
-		self.cur_button.highlight()
 		self.command(button.iden)
 
 	def on_click_nothing(self, w):
 		if self.cur_button is not None:
-			self.cur_button.dehighlight()
-			self.cur_button = None
 			self.command(None)
 
 	def place_btn(self, key, btn, aspect = False):
@@ -142,7 +136,7 @@ class KeyboardFrame(Frame):
 
 	def update_button(self, no, kd):
 		b = self.buttons[no]
-		b.config(text = str(kd.scancode))
+		b.config(text = str(kd.nicename))
 		b.update_press_label(kd.press)
 		b.update_release_label(kd.release)
 
@@ -151,6 +145,13 @@ class KeyboardFrame(Frame):
 			return None
 		else:
 			return self.cur_button.iden
+
+	def set_current_btn(self, no):
+		if self.cur_button is not None:
+			self.cur_button.dehighlight()
+		if no is not None:
+			self.cur_button = self.buttons[no]
+			self.cur_button.highlight()
 
 	# deprecated
 	def load_xml(self, xml):
@@ -175,12 +176,10 @@ class PropsFrame(Frame):
 		top.pack(side = TOP, fill = X)
 		l = Label(top, text = "scancode: ")
 		l.grid(column = 0, row = 0)
-		vcmd = (master.register(self.validate_scancode), '%P')
 		self.scancode = StringVar()
 		self.scancode.set(0)
 		self.scancode.trace("w", self.on_props_changed)
-		self.scentry = Entry(top, textvariable = self.scancode, validate = "key",
-				validatecommand = vcmd, width = 4)
+		self.scentry = Entry(top, textvariable = self.scancode)
 		self.scentry.grid(column = 1, row = 0)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
@@ -217,7 +216,12 @@ class PropsFrame(Frame):
 		self.should_notify = True
 
 	def on_props_changed(self, *args):
-		can_notify = self.scancode.get().isnumeric() and \
+		if not self.scancode_correct(self.scancode.get()):
+			self.scentry.config(bg = "#FF6D72")
+		else:
+			self.scentry.config(bg = self.cget("bg"))
+
+		can_notify = self.scancode_correct(self.scancode.get()) and \
 			self.releasearg.get() not in ["", "-"] and \
 			self.pressarg.get() not in ["", "-"]
 		if self.should_notify and can_notify:
@@ -241,8 +245,15 @@ class PropsFrame(Frame):
 		if self.should_notify:
 			self.on_props_changed()
 
-	def validate_scancode(self, text):
-		return (text.isnumeric() and int(text) < 256) or len(text) == 0
+	def scancode_correct(self, text):
+		if text[0:2] == "0x":
+			try:
+				return 0 <= int(text, 16) <= 255
+			except ValueError:
+				return False
+		else:
+			valid_mnemonics = mnemonics.values()
+			return text in valid_mnemonics
 
 	def validate_act(self, act, text):
 		a = act.get()
@@ -265,7 +276,7 @@ class PropsFrame(Frame):
 	def load_keydef(self, key):
 		old_should = self.should_notify
 		self.should_notify = False
-		self.scancode.set(key.scancode)
+		self.scancode.set(key.nicename)
 		self.pressaction.set(key.press.kind)
 		self.pressarg.set(key.press.arg)
 		self.releaseaction.set(key.release.kind)
@@ -276,10 +287,14 @@ class PropsFrame(Frame):
 		self.focus()
 
 	def get_keydef(self):
+		scancode = self.scancode.get()
 		try:
-			sc = int(self.scancode.get())
+			if scancode[0:2] == "0x":
+				sc = int(self.scancode.get(), 16)
+			else:
+				sc = self.scancode.get()
 		except ValueError:
-			sc = 0
+			sc = self.scancode.get()
 		pr = Action(self.pressaction.get(), int(self.pressarg.get()))
 		re = Action(self.releaseaction.get(), int(self.releasearg.get()))
 		return KeyDef(sc, press = pr, release = re)
@@ -323,6 +338,7 @@ class MainWindow:
 		self.bottomframe.pack(side = BOTTOM, fill = BOTH)
 
 		self.kbframe = KeyboardFrame(self.topframe, self.on_key_chosen)
+		master.bind("<Escape>", lambda x: self.on_key_chosen(None))
 		self.kbframe.load_xml("gh60.xml")
 
 		self.props = PropsFrame(self.bottomframe, self.on_props_changed)
@@ -365,6 +381,7 @@ class MainWindow:
 		self.toolbar.set_save_state(st)
 
 	def on_key_chosen(self, no):
+		self.kbframe.set_current_btn(no)
 		if no is None:
 			self.props.pack_forget()
 		else:
@@ -437,6 +454,7 @@ class MainWindow:
 				self.on_change_layer(0)
 				self.cur_filename = fname
 				self.set_save_state(False)
+				self.on_key_chosen(None)
 				self.status.set("Opened file: %s" % fname)
 			except Exception as e:
 				self.status.set("Error opening file: %s" % str(e))
@@ -470,7 +488,7 @@ class MainWindow:
 				self.status.set("Programming error: %s" % str(e))
 
 	def ask_save(self):
-		ans = askyesnocancel("Close", "Save modified layout?")
+		ans = askyesnocancel("Layout modified", "Save modified layout?")
 		if ans is None:
 			return False
 		elif ans and self.cur_filename is not None:
@@ -530,7 +548,7 @@ class Toolbar(Frame):
 				text = "program", image = img,
 				command = lambda: command("program")
 		)
-		self.program.tooltip = "write layout to device"
+		self.program.tooltip = "Write layout to device"
 		self.program.bind("<Enter>", self.on_enter)
 		self.program.bind("<Leave>", self.on_leave)
 		self.program.img = img
@@ -562,7 +580,7 @@ class StatusBar(Frame):
 		self.label.config(text = status)
 
 	def set_tip(self, tip):
-		self.label.config(text = "Tip: " + tip)
+		self.label.config(text = tip)
 
 	def clear_tip(self):
 		self.label.config(text = self.last_status)
