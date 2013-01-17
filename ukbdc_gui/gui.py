@@ -19,9 +19,14 @@ class KeyButton(Button):
 		self.bind("<Leave>", self.on_leave)
 		self.bind("<Enter>", self.on_enter)
 		self.iden = identifier
-		self.no = Label(self, text = self.iden, font = (None, 7, "normal"))
-		self.pr = Label(self, text = "", fg = "red", font = (None, 7, "normal"))
-		self.re = Label(self, text = "", fg = "blue", font = (None, 7, "normal"))
+		self.fgcol = "black"
+		self.inhfgcol = "#999999"
+		self.prcol = "red"
+		self.recol = "blue"
+		self.nocol = "#555555"
+		self.no = Label(self, text = self.iden, fg = self.nocol, font = (None, 7, "normal"))
+		self.pr = Label(self, text = "", fg = self.prcol, font = (None, 7, "normal"))
+		self.re = Label(self, text = "", fg = self.recol, font = (None, 7, "normal"))
 		for label in [self.no, self.pr, self.re]:
 			label.bind("<Button-1>", lambda x: self.invoke())
 		self.do_layout()
@@ -90,11 +95,19 @@ class KeyButton(Button):
 		else:
 			return prefix + n
 
-	def update_press_label(self, act):
+	def update_press_label(self, act, inherited):
 		self.pr.config(text = self.generate_label("↓", act))
+		if inherited:
+			self.pr.config(fg = self.inhfgcol)
+		else:
+			self.pr.config(fg = self.prcol)
 
-	def update_release_label(self, act):
+	def update_release_label(self, act, inherited):
 		self.re.config(text = self.generate_label("↑", act))
+		if inherited:
+			self.re.config(fg = self.inhfgcol)
+		else:
+			self.re.config(fg = self.recol)
 
 	def highlight(self):
 		self.highlighted = True
@@ -137,8 +150,14 @@ class KeyboardFrame(Frame):
 	def update_button(self, no, kd):
 		b = self.buttons[no]
 		b.config(text = str(kd.nicename))
-		b.update_press_label(kd.press)
-		b.update_release_label(kd.release)
+		if kd.inherited:
+			b.config(fg = b.inhfgcol, relief = SUNKEN)
+			b.no.config(fg = b.inhfgcol)
+		else:
+			b.config(fg = b.fgcol, relief = RAISED)
+			b.no.config(fg = b.nocol)
+		b.update_press_label(kd.press, kd.inherited)
+		b.update_release_label(kd.release, kd.inherited)
 
 	def get_current_btn(self):
 		if self.cur_button is None:
@@ -149,6 +168,7 @@ class KeyboardFrame(Frame):
 	def set_current_btn(self, no):
 		if self.cur_button is not None:
 			self.cur_button.dehighlight()
+			self.cur_button = None
 		if no is not None:
 			self.cur_button = self.buttons[no]
 			self.cur_button.highlight()
@@ -172,15 +192,27 @@ class PropsFrame(Frame):
 		self.should_notify = False
 		super(PropsFrame, self).__init__(master)
 		self.notify = notify
+		self.widgets = []
 		top = Frame(self)
 		top.pack(side = TOP, fill = X)
+		l = Label(top, text = "mode: ")
+		l.grid(column = 0, row = 0, sticky = W)
+		self.mode = IntVar()
+		self.mode.set(0)
+		self.moderadios = []
+		for i, t in enumerate(["defined", "inherited"]):
+			r = Radiobutton(top, text = t, variable = self.mode, value = i,
+					command = self.mode_changed)
+			r.grid(column = 1+i, row = 0, sticky = W)
+			self.moderadios.append(r)
 		l = Label(top, text = "scancode: ")
-		l.grid(column = 0, row = 0)
+		l.grid(column = 0, row = 1)
 		self.scancode = StringVar()
 		self.scancode.set(0)
 		self.scancode.trace("w", self.on_props_changed)
 		self.scentry = Entry(top, textvariable = self.scancode)
-		self.scentry.grid(column = 1, row = 0)
+		self.scentry.grid(column = 1, row = 1, columnspan = 2)
+		self.widgets.append(self.scentry)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
 		l = Label(acts, text = "key press action: ")
@@ -194,10 +226,12 @@ class PropsFrame(Frame):
 				validatecommand = vcmd, width = 4, state = DISABLED)
 		self.pressnum.var = self.pressarg
 		self.pressnum.grid(column = 2, row = 1, rowspan = 2, padx = 8)
+		self.widgets.append(self.pressnum)
 		for i, t in enumerate(self.kinds):
 			r = Radiobutton(acts, text = t, variable = self.pressaction, value = i,
 					command = lambda: self.radio_changed(self.pressaction, self.pressnum))
 			r.grid(column = 1, row = i, sticky = W)
+			self.widgets.append(r)
 		l = Label(acts, text = "key release action: ")
 		l.grid(column = 3, row = 0)
 		self.releaseaction = IntVar()
@@ -209,11 +243,26 @@ class PropsFrame(Frame):
 				validatecommand = vcmd, width = 4, state = DISABLED)
 		self.releasenum.var = self.releasearg
 		self.releasenum.grid(column = 5, row = 1, rowspan = 2, padx = 8)
+		self.widgets.append(self.releasenum)
 		for i, t in enumerate(self.kinds):
 			r = Radiobutton(acts, text = t, variable = self.releaseaction, value = i,
 					command = lambda: self.radio_changed(self.releaseaction, self.releasenum))
 			r.grid(column = 4, row = i, sticky = W)
+			self.widgets.append(r)
 		self.should_notify = True
+
+	def mode_changed(self):
+		if self.mode.get() == 0:
+			for w in self.widgets:
+				w.config(state = NORMAL)
+		else:
+			for w in self.widgets:
+				w.config(state = DISABLED)
+		# fix action enties
+		self.update_actions_form(self.pressaction, self.pressnum)
+		self.update_actions_form(self.releaseaction, self.releasenum)
+		if self.should_notify:
+			self.on_props_changed()
 
 	def on_props_changed(self, *args):
 		if not self.scancode_correct(self.scancode.get()):
@@ -228,11 +277,10 @@ class PropsFrame(Frame):
 			self.notify()
 
 	def radio_changed(self, act, entry):
+		self.update_actions_form(act, entry)
 		if act.get() == 0:
-			entry.config(state = DISABLED)
 			self.scentry.focus_set()
 		else:
-			entry.config(state = NORMAL)
 			entry.focus_set()
 			entry.selection_range(0, END)
 		if act.get() == Action.Abs:
@@ -244,6 +292,13 @@ class PropsFrame(Frame):
 				entry.var.set("0")
 		if self.should_notify:
 			self.on_props_changed()
+
+	def update_actions_form(self, act, entry):
+		if act.get() == 0:
+			entry.config(state = DISABLED)
+		else:
+			entry.config(state = NORMAL)
+
 
 	def scancode_correct(self, text):
 		if text[0:2] == "0x":
@@ -281,12 +336,19 @@ class PropsFrame(Frame):
 		self.pressarg.set(key.press.arg)
 		self.releaseaction.set(key.release.kind)
 		self.releasearg.set(key.release.arg)
-		self.radio_changed(self.pressaction, self.pressnum)
-		self.radio_changed(self.releaseaction, self.releasenum)
+		if key.inherited:
+			self.mode.set(1)
+		else:
+			self.mode.set(0)
+		self.mode_changed()
+		self.update_actions_form(self.pressaction, self.pressnum)
+		self.update_actions_form(self.releaseaction, self.releasenum)
 		self.should_notify = old_should
 		self.focus()
 
 	def get_keydef(self):
+		if self.mode.get() == 1:
+			return None
 		scancode = self.scancode.get()
 		try:
 			if scancode[0:2] == "0x":
@@ -297,11 +359,17 @@ class PropsFrame(Frame):
 			sc = self.scancode.get()
 		pr = Action(self.pressaction.get(), int(self.pressarg.get()))
 		re = Action(self.releaseaction.get(), int(self.releasearg.get()))
-		return KeyDef(sc, press = pr, release = re)
+		return KeyDef(scancode = sc, press = pr, release = re)
+
+	def set_inheritable(self, inh):
+		if inh:
+			self.moderadios[1].config(state = NORMAL)
+		else:
+			self.moderadios[1].config(state = DISABLED)
 
 	def focus(self):
-		self.scentry.focus_set()
 		self.scentry.selection_range(0, END)
+		self.scentry.focus_set()
 
 class MainWindow:
 	def __init__(self, master):
@@ -317,15 +385,28 @@ class MainWindow:
 		topbar = Frame(master, bd = 1, relief = RAISED)
 		topbar.pack(side = TOP, fill = X)
 		self.toolbar = Toolbar(topbar, self.on_menu_action, self.set_tip)
-		self.toolbar.pack(side = LEFT)
+		self.toolbar.grid(column = 0, row = 0, stick = W+N+S)
 		self.layer = IntVar(master)
 		self.layer.set(0)
 		fr = Frame(topbar)
-		fr.pack(side = RIGHT, padx = 1, pady = 1)
+		fr.grid(column = 1, row = 0, stick = E+N+S)
 		l = Label(fr, text = "Layer: ")
-		l.grid(column = 0, row = 0)
+		l.grid(column = 0, row = 0, stick = N+S+W+E)
+		Grid.rowconfigure(fr, 0, weight = 1)
 		ls = OptionMenu(fr, self.layer, *range(0, 16), command = self.on_change_layer)
 		ls.grid(column = 1, row = 0)
+		Grid.columnconfigure(topbar, 0, weight = 1)
+		Grid.columnconfigure(topbar, 1, weight = 1)
+
+		f = Frame(master)
+		f.pack(side = TOP, fill = X)
+		l = Label(f, text = "Inherits from layer: ")
+		l.pack(side = LEFT)
+		self.inh = StringVar()
+		self.inh.set("none")
+		self.inhopt = OptionMenu(f, self.inh, "none", command = self.on_change_inh)
+		self.inhopt.pack(side = LEFT)
+		self.layprops = f
 
 		self.status = StatusBar(master)
 		self.status.pack(side = BOTTOM, fill = X)
@@ -389,10 +470,26 @@ class MainWindow:
 			kd = self.layout[self.layer.get(), no]
 			self.props.load_keydef(kd)
 
+	def on_change_inh(self, lay):
+		if lay == "none":
+			lay = -1
+		else:
+			lay = int(lay)
+		self.layout.parents[self.layer.get()] = lay
+		self.on_change_layer(self.layer.get())
+		self.modified = True
+		self.status.set("Layout modified")
+		if self.cur_filename is not None:
+			self.set_save_state(True)
+
 	def on_props_changed(self):
+		cur_no = self.kbframe.get_current_btn()
 		kd = self.props.get_keydef()
-		self.kbframe.update_button(self.kbframe.get_current_btn(), kd)
-		self.layout[self.layer.get(), self.kbframe.get_current_btn()] = kd
+		if kd is None:
+			kd = KeyDef(layout = self.layout, no = cur_no, layer = self.layer.get(),
+					inherited = True)
+		self.kbframe.update_button(cur_no, kd)
+		self.layout[self.layer.get(), cur_no] = kd
 		self.modified = True
 		self.status.set("Layout modified")
 		if self.cur_filename is not None:
@@ -411,6 +508,17 @@ class MainWindow:
 		if sys.platform.startswith("win"):
 			for b in self.kbframe.buttons.values():
 				b.do_layout()
+		self.inhopt.pack_forget()
+		opts = [str(i) for i in range(0, l)]
+		if l == 0:
+			opts = ["none"] + opts
+		self.inhopt = OptionMenu(self.layprops, self.inh, *opts, command = self.on_change_inh)
+		self.inhopt.pack(side = LEFT)
+		if self.layout.parents[l] == -1:
+			self.inh.set("none")
+		else:
+			self.inh.set(str(self.layout.parents[l]))
+		self.props.set_inheritable(self.inh.get() != "none")
 
 	def on_menu_action(self, cmd):
 		if cmd == "saveas":
@@ -427,15 +535,18 @@ class MainWindow:
 				self.cur_filename = fname
 				self.set_save_state(False)
 				self.modified = False
-			except:
-				self.status.set("Failed to write file: %s!" % fname)
+			except Exception as e:
+				self.status.set("Failed to write file %s: %s!" % (fname, str(e)))
 		elif cmd == "save":
-			f = open(self.cur_filename, "wb")
-			f.write(self.layout.binary())
-			f.close()
-			self.status.set("Saved.")
-			self.set_save_state(False)
-			self.modified = False
+			try:
+				f = open(self.cur_filename, "wb")
+				f.write(self.layout.binary())
+				f.close()
+				self.status.set("Saved.")
+				self.set_save_state(False)
+				self.modified = False
+			except Exception as e:
+				self.status.set("Failed to write file %s: %s!" % (fname, str(e)))
 		elif cmd == "open":
 			if self.modified:
 				cont = self.ask_save()
@@ -479,7 +590,7 @@ class MainWindow:
 		elif cmd == "program":
 			u = UKBDC()
 			try:
-				binary = self.layout.binary()
+				binary = self.layout.binary(fordevice = True)
 				u.attach()
 				u.program_layout(binary)
 				u.detach()
