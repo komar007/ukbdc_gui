@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 
 from ukbdc_lib.layout import *
 from ukbdc_lib.ukbdc import UKBDC
+from ukbdc_lib.mnemonics import mnemonics
 
 class KeyButton(Button):
 	hicolor = "lightgreen"
@@ -173,6 +174,15 @@ class KeyboardFrame(Frame):
 			self.cur_button = self.buttons[no]
 			self.cur_button.highlight()
 
+	def next_button(self):
+		if self.cur_button is None:
+			return
+		btnids = sorted(self.buttons.keys())
+		pos = btnids.index(self.cur_button.iden) + 1
+		if pos >= len(btnids):
+			pos = 0
+		self.on_button_pressed(self.buttons[btnids[pos]])
+
 	# deprecated
 	def load_xml(self, xml):
 		tree = ET.parse(xml)
@@ -188,10 +198,11 @@ class KeyboardFrame(Frame):
 
 class PropsFrame(Frame):
 	kinds = ["None", "Change layer by", "Go to layer"]
-	def __init__(self, master, notify = lambda: False):
+	def __init__(self, master, notify = lambda: False, next_button = lambda: False):
 		self.should_notify = False
 		super(PropsFrame, self).__init__(master)
 		self.notify = notify
+		self.next_button = next_button
 		self.widgets = []
 		top = Frame(self)
 		top.pack(side = TOP, fill = X)
@@ -211,8 +222,11 @@ class PropsFrame(Frame):
 		self.scancode.set(0)
 		self.scancode.trace("w", self.on_props_changed)
 		self.scentry = Entry(top, textvariable = self.scancode)
+		self.scentry.bind("<FocusOut>", self.on_scentry_tab)
 		self.scentry.grid(column = 1, row = 1, columnspan = 2)
 		self.widgets.append(self.scentry)
+		self.lhints = Label(top)
+		self.lhints.grid(column = 3, row = 1)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
 		l = Label(acts, text = "key press action: ")
@@ -270,11 +284,26 @@ class PropsFrame(Frame):
 		else:
 			self.scentry.config(bg = self.cget("bg"))
 
+		if len(self.scancode.get()) == 0:
+			self.hints = []
+		else:
+			self.hints = list(filter(
+					lambda x: x.startswith(self.scancode.get()),
+					mnemonics.values())
+			)
+		self.lhints.config(text = " ".join(self.hints))
+
 		can_notify = self.scancode_correct(self.scancode.get()) and \
 			self.releasearg.get() not in ["", "-"] and \
 			self.pressarg.get() not in ["", "-"]
 		if self.should_notify and can_notify:
 			self.notify()
+
+	def on_scentry_tab(self, event):
+		if len(self.hints) == 1 and self.scancode.get() != self.hints[0]:
+			self.scancode.set(self.hints[0])
+			self.scentry.icursor(END)
+			self.scentry.focus_set()
 
 	def radio_changed(self, act, entry):
 		self.update_actions_form(act, entry)
@@ -422,7 +451,12 @@ class MainWindow:
 		master.bind("<Escape>", lambda x: self.on_key_chosen(None))
 		self.kbframe.load_xml("gh60.xml")
 
-		self.props = PropsFrame(self.bottomframe, self.on_props_changed)
+		master.bind("<Control-Return>", lambda x: self.kbframe.next_button())
+
+		self.props = PropsFrame(self.bottomframe,
+				notify = self.on_props_changed,
+				next_button = self.kbframe.next_button
+		)
 		self.on_change_layer(self.layer.get())
 
 	def set_tip(self, tip):
