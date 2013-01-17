@@ -9,114 +9,146 @@ from ukbdc_lib.layout import *
 from ukbdc_lib.ukbdc import UKBDC
 from ukbdc_lib.mnemonics import mnemonics
 
+def platform_windows():
+	return sys.platform.startswith("win")
+
 class KeyButton(Button):
-	hicolor = "lightgreen"
-	def __init__(self, master, identifier, command = lambda: False):
-		super(KeyButton, self).__init__(master, text = "Key", command = self.on_click)
-		self.command = command
-		self.highlighted = False
-		self.bgcolor = self.cget("bg") # remember bg color for later use
-		self.grid(column = 0, row = 0, sticky = N+S+E+W)
-		self.bind("<Leave>", self.on_leave)
-		self.bind("<Enter>", self.on_enter)
-		self.iden = identifier
-		self.fgcol = "black"
-		self.inhfgcol = "#999999"
-		self.prcol = "red"
-		self.recol = "blue"
-		self.nocol = "#555555"
-		self.no = Label(self, text = self.iden, fg = self.nocol, font = (None, 7, "normal"))
-		self.pr = Label(self, text = "", fg = self.prcol, font = (None, 7, "normal"))
-		self.re = Label(self, text = "", fg = self.recol, font = (None, 7, "normal"))
-		for label in [self.no, self.pr, self.re]:
+	_fgcol    = "black"   # text color
+	_inhfgcol = "#999999" # text color if inherited
+	_prcol    = "red"     # press action label color
+	_recol    = "blue"    # release action label color
+	_nocol    = "#555555" # number label color
+	_hibgcol  = "#90EE90" # background color if highlighted
+	_ahibgcol = "#60FF60" # mouse-over background color if highlighted
+	_labfont  = (None, 7, "normal") # label font
+	# on windows, reset active highlighted color, because windows does not highlight
+	if platform_windows():
+		_ahibgcol = _hibgcol
+
+	def __init__(self, master, number, command = lambda: False):
+		super(KeyButton, self).__init__(master, command = self._on_click)
+		self._ = {} # subwidgets
+		self._mouse_over = False
+		self._number = number
+		self._command = command
+		self._bgcol = self.cget("bg") # remember bg color for later use
+		self._abgcol = self.cget("activebackground") # ... and mouse-over background color
+		self.bind("<Leave>", self._on_leave)
+		self.bind("<Enter>", self._on_enter)
+		# make labels
+		self._['l_no'] = Label(self, text = self.number,
+				fg = self._nocol, font = self._labfont)
+		self._['l_pr'] = Label(self, text = "",
+				fg = self._prcol, font = self._labfont)
+		self._['l_re'] = Label(self, text = "",
+				fg = self._recol, font = self._labfont)
+		# make sure clicking on labels works
+		for label in self._.values():
 			label.bind("<Button-1>", lambda x: self.invoke())
-		self.do_layout()
+		self._layout_labels()
 		for x in range(3):
 			Grid.columnconfigure(self, x, weight = 1)
 			Grid.rowconfigure(self, x, weight = 1)
 		Grid.columnconfigure(self, 1, weight = 10)
 		Grid.rowconfigure(self, 1, weight = 10)
 
-	def do_layout(self, event = None):
+	def _layout_labels(self):
 		# windows quirk hack
-		self.no.grid_forget()
-		self.pr.grid_forget()
-		self.re.grid_forget()
-		self.no.grid(column = 0, row = 0, sticky = N+W)
-		self.pr.grid(column = 0, row = 2, sticky = S+W)
-		self.re.grid(column = 2, row = 2, sticky = S+E)
+		self._['l_no'].grid_forget()
+		self._['l_pr'].grid_forget()
+		self._['l_re'].grid_forget()
+		self._['l_no'].grid(column = 0, row = 0, sticky = N+W)
+		self._['l_pr'].grid(column = 0, row = 2, sticky = S+W)
+		self._['l_re'].grid(column = 2, row = 2, sticky = S+E)
 
-	def set_color(self, color, only_labels = False):
-		if not only_labels:
-			self.config(bg = color)
-		for label in [self.pr, self.re, self.no]:
+	def _on_enter(self, event):
+		self._mouse_over = True
+		# update labels to have the same background as button
+		color = self.cget("activebackground")
+		self._set_labels_color(color)
+
+	def _on_leave(self, event):
+		self._mouse_over = False
+		# update labels to have the same background as button
+		color = self.cget("background")
+		self._set_labels_color(color)
+		# windows hack
+		if platform_windows():
+			self._layout_labels()
+
+	def _on_click(self):
+		# run callback
+		self._command(self)
+
+	def _set_labels_color(self, color):
+		for label in self._.values():
 			label.config(bg = color)
 
-	def on_enter(self, event):
-		color = self.cget("activebackground")
-		if sys.platform.startswith("win"):
-			self.set_color(color)
-		else:
-			self.set_color(color, only_labels = True)
-
-	def on_leave(self, event):
-		if sys.platform.startswith("win"):
-			self.do_layout(event)
-		color = self.cget("bg")
-		if sys.platform.startswith("win"):
-			if self.highlighted:
-				self.set_color(self.hicolor)
-			else:
-				self.set_color(color)
-		else:
-			self.set_color(color, only_labels = True)
-
-	def on_click(self):
-		self.command(self)
-
-	# Public API starts here...
-
-	def generate_label(self, prefix, act):
+	# returns label for an action (relative or absolute)
+	def _generate_label(self, prefix, action):
 		try:
-			arg = str(act.arg)
+			arg = str(action.arg)
 		except ValueError:
 			arg = ""
-		if act.kind == Action.Rel:
-			if act.arg >= 0:
+		if action.kind == Action.Rel:
+			if action.arg >= 0:
 				s = "+" + arg
 			else:
 				s = arg
 			n = s
-		elif act.kind == Action.Abs:
+		elif action.kind == Action.Abs:
 			n = arg
 		else:
 			n = ""
-		if len(n) == 0:
+		if n == "":
 			return ""
 		else:
 			return prefix + n
 
-	def update_press_label(self, act, inherited):
-		self.pr.config(text = self.generate_label("↓", act))
+	def _update_press_label(self, action, inherited):
+		self._['l_pr'].config(text = self._generate_label("↓", action))
 		if inherited:
-			self.pr.config(fg = self.inhfgcol)
+			self._['l_pr'].config(fg = self._inhfgcol)
 		else:
-			self.pr.config(fg = self.prcol)
+			self._['l_pr'].config(fg = self._prcol)
 
-	def update_release_label(self, act, inherited):
-		self.re.config(text = self.generate_label("↑", act))
+	def _update_release_label(self, action, inherited):
+		self._['l_re'].config(text = self._generate_label("↑", action))
 		if inherited:
-			self.re.config(fg = self.inhfgcol)
+			self._['l_re'].config(fg = self._inhfgcol)
 		else:
-			self.re.config(fg = self.recol)
+			self._['l_re'].config(fg = self._recol)
+
+	# Public API starts here...
+
+	@property
+	def number(self):
+		return self._number
 
 	def highlight(self):
-		self.highlighted = True
-		self.set_color(self.hicolor)
+		self.config(activebackground = self._ahibgcol, bg = self._hibgcol)
+		if self._mouse_over:
+			self._set_labels_color(self._ahibgcol)
+		else:
+			self._set_labels_color(self._hibgcol)
 
 	def dehighlight(self):
-		self.highlighted = False
-		self.set_color(self.bgcolor)
+		self.config(activebackground = self._abgcol, bg = self._bgcol)
+		if self._mouse_over:
+			self._set_labels_color(self._abgcol)
+		else:
+			self._set_labels_color(self._bgcol)
+
+	def set_keydef(self, kd):
+		self.config(text = str(kd.nicename))
+		if kd.inherited:
+			self.config(fg = self._inhfgcol, relief = SUNKEN)
+			self._['l_no'].config(fg = self._inhfgcol)
+		else:
+			self.config(fg = self._fgcol, relief = RAISED)
+			self._['l_no'].config(fg = self._nocol)
+		self._update_press_label(kd.press, kd.inherited)
+		self._update_release_label(kd.release, kd.inherited)
 
 class KeyboardFrame(Frame):
 	hicolor = "lightyellow"
@@ -128,7 +160,7 @@ class KeyboardFrame(Frame):
 		master.bind("<Button-1>", self.on_click_nothing)
 
 	def on_button_pressed(self, button):
-		self.command(button.iden)
+		self.command(button.number)
 
 	def on_click_nothing(self, w):
 		if self.cur_button is not None:
@@ -150,21 +182,13 @@ class KeyboardFrame(Frame):
 
 	def update_button(self, no, kd):
 		b = self.buttons[no]
-		b.config(text = str(kd.nicename))
-		if kd.inherited:
-			b.config(fg = b.inhfgcol, relief = SUNKEN)
-			b.no.config(fg = b.inhfgcol)
-		else:
-			b.config(fg = b.fgcol, relief = RAISED)
-			b.no.config(fg = b.nocol)
-		b.update_press_label(kd.press, kd.inherited)
-		b.update_release_label(kd.release, kd.inherited)
+		b.set_keydef(kd)
 
 	def get_current_btn(self):
 		if self.cur_button is None:
 			return None
 		else:
-			return self.cur_button.iden
+			return self.cur_button.number
 
 	def set_current_btn(self, no):
 		if self.cur_button is not None:
@@ -178,7 +202,7 @@ class KeyboardFrame(Frame):
 		if self.cur_button is None:
 			return
 		btnids = sorted(self.buttons.keys())
-		pos = btnids.index(self.cur_button.iden) + 1
+		pos = btnids.index(self.cur_button.number) + 1
 		if pos >= len(btnids):
 			pos = 0
 		self.on_button_pressed(self.buttons[btnids[pos]])
@@ -191,9 +215,10 @@ class KeyboardFrame(Frame):
 		self.kheight = int(keyboard.attrib['height'])
 		self.buttons = {}
 		for key in keyboard:
-			iden = int(key.attrib['id'])
-			btn = KeyButton(self, iden, self.on_button_pressed)
-			self.buttons[iden] = btn
+			number = int(key.attrib['id'])
+			btn = KeyButton(self, number, command = self.on_button_pressed)
+			btn.grid(column = 0, row = 0, sticky = N+S+E+W)
+			self.buttons[number] = btn
 			self.place_btn(key, btn)
 
 class PropsFrame(Frame):
@@ -533,15 +558,15 @@ class MainWindow:
 		# FIXME: take that from xml
 		for b in self.kbframe.buttons.values():
 			try:
-				kd = self.layout[l, b.iden]
-				self.kbframe.update_button(b.iden, kd)
+				kd = self.layout[l, b.number]
+				self.kbframe.update_button(b.number, kd)
 			except KeyError:
 				pass
 		# reload button props on the new layer
 		self.on_key_chosen(self.kbframe.get_current_btn())
-		if sys.platform.startswith("win"):
+		if platform_windows():
 			for b in self.kbframe.buttons.values():
-				b.do_layout()
+				b._layout_labels()
 		self.inhopt.pack_forget()
 		opts = [str(i) for i in range(0, l)]
 		if l == 0:
