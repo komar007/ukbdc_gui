@@ -9,6 +9,8 @@ from ukbdc_lib.layout import *
 from ukbdc_lib.ukbdc import UKBDC
 from ukbdc_lib.mnemonics import mnemonics
 
+from buttons import Buttons
+
 def platform_windows():
 	return sys.platform.startswith("win")
 
@@ -151,75 +153,88 @@ class KeyButton(Button):
 		self._update_release_label(kd.release, kd.inherited)
 
 class KeyboardFrame(Frame):
-	hicolor = "lightyellow"
-	def __init__(self, master, command = lambda: False):
+	# on_button_pressed will receive the button number
+	# or Null if a button was deselected
+	def __init__(self, master, on_button_pressed):
 		super(KeyboardFrame, self).__init__(master)
-		self.cur_button = None
-		self.command = command
-		self.bgcolor = self.master.cget("bg")
-		master.bind("<Button-1>", self.on_click_nothing)
+		self._ = {}
+		self._button_callback = on_button_pressed
+		self._cur_button = None
+		# initialize actual keyboard dimensions to (1, 1),
+		# because we don't know the dimensions yet
+		self.bind("<Button-1>", self._on_click_nothing)
+		self.bind("<Configure>", self._on_change_size)
+		self._['f_cont'] = Frame(self)
 
-	def on_button_pressed(self, button):
-		self.command(button.number)
+	# set keyboard containter size to a fixed ratio, and fill the frame with it
+	def _on_change_size(self, event):
+		ratio = float(self._bdefs.width) / self._bdefs.height
+		myratio = float(self.winfo_width()) / self.winfo_height()
+		if myratio > ratio:
+			h = self.winfo_height()
+			w = h * ratio
+		else:
+			w = self.winfo_width()
+			h = w / ratio
+		self._['f_cont'].place(
+				anchor = CENTER,
+				width = w, height = h,
+				relx = 0.5, rely = 0.5)
 
-	def on_click_nothing(self, w):
-		if self.cur_button is not None:
-			self.command(None)
+	# triggered by one of the contained buttons
+	# pass button press info to parent to decide what to do with it
+	def _on_button_pressed(self, button):
+		self._button_callback(button.number)
 
-	def place_btn(self, key, btn, aspect = False):
-		posx = int(key.attrib['x'])
-		posy = int(key.attrib['y'])
-		width = int(key.attrib['width'])
-		height = int(key.attrib['height'])
-		btn.place(
-				relx = float(posx) / self.kwidth,
-				rely = float(posy) / self.kheight,
-				relwidth = float(width) / self.kwidth,
-				relheight = float(height) / self.kheight
-		)
+	def _on_click_nothing(self, event):
+		if self._cur_button is not None:
+			self._button_callback(None)
+
+	def _get_btn_widget(self, no):
+		return self._['b_%i' % no]
 
 	# Public API starts here...
 
 	def update_button(self, no, kd):
-		b = self.buttons[no]
+		b = self._get_btn_widget(no)
 		b.set_keydef(kd)
 
 	def get_current_btn(self):
-		if self.cur_button is None:
+		if self._cur_button is None:
 			return None
 		else:
-			return self.cur_button.number
+			return self._cur_button.number
 
 	def set_current_btn(self, no):
-		if self.cur_button is not None:
-			self.cur_button.dehighlight()
-			self.cur_button = None
+		if self._cur_button is not None:
+			self._cur_button.dehighlight()
+			self._cur_button = None
 		if no is not None:
-			self.cur_button = self.buttons[no]
-			self.cur_button.highlight()
+			self._cur_button = self._get_btn_widget(no)
+			self._cur_button.highlight()
 
+	# Goes to the next button. Maybe it shouldn't be here...
 	def next_button(self):
-		if self.cur_button is None:
+		if self._cur_button is None:
 			return
-		btnids = sorted(self.buttons.keys())
-		pos = btnids.index(self.cur_button.number) + 1
-		if pos >= len(btnids):
+		nos = sorted(self._bdefs.keys())
+		pos = nos.index(self._cur_button.number) + 1
+		if pos >= len(nos):
 			pos = 0
-		self.on_button_pressed(self.buttons[btnids[pos]])
+		self._on_button_pressed(self._get_btn_widget(nos[pos]))
 
-	# deprecated
-	def load_xml(self, xml):
-		tree = ET.parse(xml)
-		keyboard = tree.getroot()
-		self.kwidth = int(keyboard.attrib['width'])
-		self.kheight = int(keyboard.attrib['height'])
-		self.buttons = {}
-		for key in keyboard:
-			number = int(key.attrib['id'])
-			btn = KeyButton(self, number, command = self.on_button_pressed)
-			btn.grid(column = 0, row = 0, sticky = N+S+E+W)
-			self.buttons[number] = btn
-			self.place_btn(key, btn)
+	def setup_buttons(self, btns):
+		self._bdefs = btns
+		for no, button in btns.items():
+			widget = KeyButton(self._['f_cont'], no, command = self._on_button_pressed)
+			widget.grid(column = 0, row = 0, sticky = N+S+E+W)
+			widget.place(
+					relx = float(button.x) / btns.width,
+					rely = float(button.y) / btns.height,
+					relwidth = float(button.width) / btns.width,
+					relheight = float(button.height) / btns.height
+			)
+			self._['b_%i' % no] = widget
 
 class PropsFrame(Frame):
 	kinds = ["None", "Change layer by", "Go to layer"]
@@ -465,16 +480,29 @@ class MainWindow:
 		self.status = StatusBar(master)
 		self.status.pack(side = BOTTOM, fill = X)
 
-		self.topframe = Frame(master, bd = 1, relief = FLAT)
-		self.topframe.bind("<Configure>", self.configure_event)
 		self.bottomframe = Frame(master, bd = 1, relief = SUNKEN)
 
-		self.topframe.pack(side = TOP, fill = BOTH, expand = True)
 		self.bottomframe.pack(side = BOTTOM, fill = BOTH)
 
-		self.kbframe = KeyboardFrame(self.topframe, self.on_key_chosen)
+		self.kbframe = KeyboardFrame(master, self.on_key_chosen)
+		self.kbframe.pack(side = TOP, fill = BOTH, expand = True)
 		master.bind("<Escape>", lambda x: self.on_key_chosen(None))
-		self.kbframe.load_xml("gh60.xml")
+
+# blah
+		tree = ET.parse("gh60.xml")
+		keyboard = tree.getroot()
+		w = int(keyboard.attrib['width'])
+		h = int(keyboard.attrib['height'])
+		buttons = Buttons(w, h)
+		self.btn_nos = []
+		for key in keyboard:
+			no = int(key.attrib['id'])
+			self.btn_nos.append(no)
+			buttons.add_button(no,
+					int(key.attrib['width']), int(key.attrib['height']),
+					int(key.attrib['x']), int(key.attrib['y']))
+# blah
+		self.kbframe.setup_buttons(buttons)
 
 		master.bind("<Control-Return>", lambda x: self.kbframe.next_button())
 
@@ -489,21 +517,6 @@ class MainWindow:
 			self.status.clear_tip()
 		else:
 			self.status.set_tip(tip)
-
-	def configure_event(self, event):
-		ratio = float(self.kbframe.kwidth) / self.kbframe.kheight
-		myratio = float(self.topframe.winfo_width()) / self.topframe.winfo_height()
-		if myratio > ratio:
-			h = self.topframe.winfo_height()
-			w = h * ratio
-		else:
-			w = self.topframe.winfo_width()
-			h = w / ratio
-		self.kbframe.place(
-				anchor = CENTER,
-				width = w, height = h,
-				relx = 0.5, rely = 0.5
-		)
 
 	def place_frames(self):
 		self.topframe.place(y = 0, relheight = self.split, relwidth = 1)
@@ -556,10 +569,10 @@ class MainWindow:
 
 	def on_change_layer(self, l):
 		# FIXME: take that from xml
-		for b in self.kbframe.buttons.values():
+		for b in self.btn_nos:
 			try:
-				kd = self.layout[l, b.number]
-				self.kbframe.update_button(b.number, kd)
+				kd = self.layout[l, b]
+				self.kbframe.update_button(b, kd)
 			except KeyError:
 				pass
 		# reload button props on the new layer
