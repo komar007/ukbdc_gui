@@ -114,7 +114,6 @@ class UKBDC(object):
 	ep_out = 0x03
 	ep_in = 0x82
 	tm_out = 1000
-	psize = 32
 	def __init__(self):
 		self.dev = None
 		pass
@@ -130,22 +129,32 @@ class UKBDC(object):
 			usb.util.claim_interface(self.dev, self.interface)
 		except usb.core.USBError:
 			self.dev.detach_kernel_driver(self.interface)
+		config = self.dev[0]
+		iface = config[self.interface, 0]
+		self.epin = usb.util.find_descriptor(iface, custom_match = \
+				lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == \
+					usb.util.ENDPOINT_IN)
+		self.epout = usb.util.find_descriptor(iface, custom_match = \
+				lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == \
+					usb.util.ENDPOINT_OUT)
 		self.reset()
 
 	def detach(self):
 		usb.util.release_interface(self.dev, self.interface)
+		self.epin = None
+		self.epout = None
 
 	def write_packet(self, p):
-		if len(p) > self.psize:
-			raise OverflowError("packet length > %i bytes" % self.psize)
+		if len(p) > self.epout.wMaxPacketSize:
+			raise OverflowError("packet length > bMaxPacketSize")
 		elif self.dev is not None:
-			self.dev.write(self.ep_out, bytes(p), self.interface, self.tm_out)
+			self.epout.write(bytes(p), timeout = self.tm_out)
 		else:
 			raise RuntimeError("device not attached")
 
 	def read_packet(self):
 		if self.dev is not None:
-			return self.dev.read(self.ep_in, self.psize, self.interface, self.tm_out)
+			return self.epin.read(self.epin.wMaxPacketSize, timeout = self.tm_out)
 		else:
 			raise RuntimeError("device not attached")
 
@@ -157,7 +166,7 @@ class UKBDC(object):
 		self.write_packet(Reset())
 
 	def send(self, msg):
-		msg.set_packet_size(self.psize)
+		msg.set_packet_size(self.epout.wMaxPacketSize)
 		for packet in msg:
 			self.write_packet(packet)
 
