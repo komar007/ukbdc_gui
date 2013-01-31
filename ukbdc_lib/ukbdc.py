@@ -36,14 +36,22 @@ class Message(object):
 	def __init__(self, hdr, payload = b''):
 		self.hdr = bytes([hdr])
 		self.payload = bytes(payload)
+		self.psize = None
+
+	def set_packet_size(self, psize):
+		self.psize = psize
 
 	def __len__(self):
 		return 1 + len(self.payload)
+		if self.psize is None:
+			raise RuntimeError("psize not set!")
 
 	def __iter__(self):
+		if self.psize is None:
+			raise RuntimeError("psize not set!")
 		msg = self.hdr + self.payload
-		fst = msg[0:60]
-		rest = [msg[i:i+63] for i in range(60, len(msg), 63)]
+		fst = msg[0:self.psize - 4]
+		rest = [msg[i:i+self.psize-1] for i in range(self.psize - 4, len(msg), self.psize - 1)]
 		payload = bytes(c_uint8(len(self))) + bytes(c_uint16(crc16(msg))) + fst
 		yield Start(payload)
 		for c in rest:
@@ -105,7 +113,8 @@ class UKBDC(object):
 	interface = 1
 	ep_out = 0x03
 	ep_in = 0x82
-	tm_out = 100
+	tm_out = 1000
+	psize = 32
 	def __init__(self):
 		self.dev = None
 		pass
@@ -127,8 +136,8 @@ class UKBDC(object):
 		usb.util.release_interface(self.dev, self.interface)
 
 	def write_packet(self, p):
-		if len(p) > 64:
-			raise OverflowError("packet length > 64 bytes")
+		if len(p) > self.psize:
+			raise OverflowError("packet length > %i bytes" % self.psize)
 		elif self.dev is not None:
 			self.dev.write(self.ep_out, bytes(p), self.interface, self.tm_out)
 		else:
@@ -136,7 +145,7 @@ class UKBDC(object):
 
 	def read_packet(self):
 		if self.dev is not None:
-			return self.dev.read(self.ep_in, 64, self.interface, self.tm_out)
+			return self.dev.read(self.ep_in, self.psize, self.interface, self.tm_out)
 		else:
 			raise RuntimeError("device not attached")
 
@@ -148,6 +157,7 @@ class UKBDC(object):
 		self.write_packet(Reset())
 
 	def send(self, msg):
+		msg.set_packet_size(self.psize)
 		for packet in msg:
 			self.write_packet(packet)
 

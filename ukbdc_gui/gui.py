@@ -6,7 +6,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 from ukbdc_lib.layout import *
-from ukbdc_lib.ukbdc import UKBDC
+from ukbdc_lib import UKBDC, USBError
 from ukbdc_lib.mnemonics import mnemonics
 
 from buttons import Buttons
@@ -656,7 +656,7 @@ class MainWindow:
 				u.program_layout(binary)
 				u.detach()
 				self.status.set("Programmed %i bytes of layout" % len(binary))
-			except Exception as e:
+			except USBError as e:
 				self.status.set("Programming error: %s" % str(e))
 
 	def ask_save(self):
