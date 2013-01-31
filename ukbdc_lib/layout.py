@@ -90,7 +90,10 @@ class KeyDef(object):
 		try:
 			return mnemonics[self.scancode]
 		except KeyError:
-			return hex(self.scancode)
+			if self.scancode == 0:
+				return ""
+			else:
+				return hex(self.scancode)
 
 class Layout(object):
 	def __init__(self, no_keys = None, no_layers = None):

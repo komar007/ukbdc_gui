@@ -142,7 +142,7 @@ class KeyButton(Button):
 			self._set_labels_color(self._bgcol)
 
 	def set_keydef(self, kd):
-		self.config(text = str(kd.nicename))
+		self.config(text = kd.nicename)
 		if kd.inherited:
 			self.config(fg = self._inhfgcol, relief = SUNKEN)
 			self._['l_no'].config(fg = self._inhfgcol)
@@ -441,11 +441,13 @@ class PropsFrame(Frame):
 		self.scentry.focus_set()
 
 class MainWindow:
-	def __init__(self, master):
+	def __init__(self, master, buttons):
 		# FIXME: read params from xml...
+		self.buttons = buttons
+		self.btn_nos = buttons.nos
 		self.cur_filename = None
 		self.modified = False
-		self.layout = Layout(64, 4)
+		self.layout = Layout(buttons.num_keys, 4)
 		master.wm_geometry("800x600+0+0")
 		self.master = master
 		self.menu = MainMenu(master, self.on_menu_action)
@@ -488,20 +490,6 @@ class MainWindow:
 		self.kbframe.pack(side = TOP, fill = BOTH, expand = True)
 		master.bind("<Escape>", lambda x: self.on_key_chosen(None))
 
-# blah
-		tree = ET.parse("gh60.xml")
-		keyboard = tree.getroot()
-		w = int(keyboard.attrib['width'])
-		h = int(keyboard.attrib['height'])
-		buttons = Buttons(w, h)
-		self.btn_nos = []
-		for key in keyboard:
-			no = int(key.attrib['id'])
-			self.btn_nos.append(no)
-			buttons.add_button(no,
-					int(key.attrib['width']), int(key.attrib['height']),
-					int(key.attrib['x']), int(key.attrib['y']))
-# blah
 		self.kbframe.setup_buttons(buttons)
 
 		master.bind("<Control-Return>", lambda x: self.kbframe.next_button())
@@ -647,7 +635,7 @@ class MainWindow:
 				if not cont:
 					return
 			# FIXME: take that from xml
-			self.layout = Layout(64, 4)
+			self.layout = Layout(self.buttons.num_keys, 4)
 			self.layer.set(0)
 			self.on_change_layer(0)
 			self.cur_filename = None
@@ -664,6 +652,7 @@ class MainWindow:
 			try:
 				binary = self.layout.binary(fordevice = True)
 				u.attach()
+				u.reset()
 				u.program_layout(binary)
 				u.detach()
 				self.status.set("Programmed %i bytes of layout" % len(binary))
@@ -772,8 +761,21 @@ class StatusBar(Frame):
 		self.label.config(text = "")
 		self.last_status = ""
 
+
+tree = ET.parse("ghpad.xml")
+keyboard = tree.getroot()
+w = int(keyboard.attrib['width'])
+h = int(keyboard.attrib['height'])
+num_keys = int(keyboard.attrib['num_keys'])
+buttons = Buttons(num_keys, w, h)
+for key in keyboard:
+	no = int(key.attrib['id'])
+	buttons.add_button(no,
+			int(key.attrib['width']), int(key.attrib['height']),
+			int(key.attrib['x']), int(key.attrib['y']))
+
 root = Tk()
 
-app = MainWindow(root)
+app = MainWindow(root, buttons)
 
 root.mainloop()

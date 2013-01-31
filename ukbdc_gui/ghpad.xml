@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<keyboard num_keys="20" width="32" height="40">
+	<key x="0"   y="0"  width="8"  height="8"  id="0" />
+	<key x="8"   y="0"  width="8"  height="8"  id="1" />
+	<key x="16"  y="0"  width="8"  height="8"  id="2" />
+	<key x="24"  y="0"  width="8"  height="8"  id="3" />
+
+	<key x="0"   y="8"  width="8"  height="8"  id="4" />
+	<key x="8"   y="8"  width="8"  height="8"  id="5" />
+	<key x="16"  y="8"  width="8"  height="8"  id="6" />
+	<key x="24"  y="8"  width="8"  height="16" id="7" />
+
+	<key x="0"   y="16" width="8"  height="8"  id="8" />
+	<key x="8"   y="16" width="8"  height="8"  id="9" />
+	<key x="16"  y="16" width="8"  height="8"  id="10"/>
+
+	<key x="0"   y="24" width="8"  height="8"  id="12"/>
+	<key x="8"   y="24" width="8"  height="8"  id="13"/>
+	<key x="16"  y="24" width="8"  height="8"  id="14"/>
+	<key x="24"  y="24" width="8"  height="16" id="15"/>
+
+	<key x="0"   y="32" width="16" height="8"  id="16"/>
+	<key x="16"  y="32" width="8"  height="8"  id="18"/>
+</keyboard>
