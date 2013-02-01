@@ -453,9 +453,12 @@ class MainWindow:
 		self.menu = MainMenu(master, self.on_menu_action)
 		master.config(menu = self.menu)
 
+		self.status = StatusBar(master)
+		self.status.pack(side = BOTTOM, fill = X)
+
 		topbar = Frame(master, bd = 1, relief = RAISED)
 		topbar.pack(side = TOP, fill = X)
-		self.toolbar = Toolbar(topbar, self.on_menu_action, self.set_tip)
+		self.toolbar = Toolbar(topbar, self.on_menu_action, self.status)
 		self.toolbar.grid(column = 0, row = 0, stick = W+N+S)
 		self.layer = IntVar(master)
 		self.layer.set(0)
@@ -479,9 +482,6 @@ class MainWindow:
 		self.inhopt.pack(side = LEFT)
 		self.layprops = f
 
-		self.status = StatusBar(master)
-		self.status.pack(side = BOTTOM, fill = X)
-
 		self.bottomframe = Frame(master, bd = 1, relief = SUNKEN)
 
 		self.bottomframe.pack(side = BOTTOM, fill = BOTH)
@@ -499,12 +499,6 @@ class MainWindow:
 				next_button = self.kbframe.next_button
 		)
 		self.on_change_layer(self.layer.get())
-
-	def set_tip(self, tip):
-		if tip is None:
-			self.status.clear_tip()
-		else:
-			self.status.set_tip(tip)
 
 	def place_frames(self):
 		self.topframe.place(y = 0, relheight = self.split, relwidth = 1)
@@ -556,7 +550,6 @@ class MainWindow:
 			self.set_save_state(True)
 
 	def on_change_layer(self, l):
-		# FIXME: take that from xml
 		for b in self.btn_nos:
 			try:
 				kd = self.layout[l, b]
@@ -700,38 +693,57 @@ class MainMenu(Menu):
 		else:
 			self.filemenu.entryconfig(2, state = DISABLED)
 
-class Toolbar(Frame):
-	def __init__(self, master, command, set_tip):
-		super(Toolbar, self).__init__(master)
-		self.set_tip = set_tip
+class TooltipButton(Button):
+	def __init__(self, *args, statusbar = None, tooltip = None, **kwargs):
+		super(TooltipButton, self).__init__(*args, **kwargs)
+		self._tooltip = tooltip
+		if statusbar == None:
+			raise ValueError("statusbar can't be None")
+		else:
+			self._statusbar = statusbar
+		self.bind("<Enter>", self.on_enter)
+		self.bind("<Leave>", self.on_leave)
 
+	@property
+	def tooltip(self):
+		return self._tooltip
+
+	@tooltip.setter
+	def tooltip(self, val):
+		self._tooltip = val
+
+	def on_enter(self, ev):
+		if self.tooltip is not None:
+			self._statusbar.set_tip(self.tooltip)
+
+	def on_leave(self, ev):
+		if self.tooltip is not None:
+			self._statusbar.clear_tip()
+
+
+class Toolbar(Frame):
+	def __init__(self, master, command, statusbar):
+		super(Toolbar, self).__init__(master)
+		self._statusbar = statusbar
 		img = PhotoImage(file = "icons/save.gif")
-		self.save = Button(self,
+		self.save = TooltipButton(self,
 				text = "save", image = img,
-				command = lambda: command("save")
+				command = lambda: command("save"),
+				tooltip = "Save current layout",
+				statusbar = self._statusbar
 		)
-		self.save.tooltip = "Save current layout"
-		self.save.bind("<Enter>", self.on_enter)
-		self.save.bind("<Leave>", self.on_leave)
 		self.save.img = img
 		self.save.pack(side = LEFT, padx = 1, pady = 1)
 		img = PhotoImage(file = "icons/program.gif")
-		self.program = Button(self,
+		self.program = TooltipButton(self,
 				text = "program", image = img,
-				command = lambda: command("program")
+				command = lambda: command("program"),
+				tooltip = "Write layout to device",
+				statusbar = self._statusbar
 		)
-		self.program.tooltip = "Write layout to device"
-		self.program.bind("<Enter>", self.on_enter)
-		self.program.bind("<Leave>", self.on_leave)
 		self.program.img = img
 		self.program.pack(side = LEFT, padx = 1, pady = 1)
 		self.set_save_state(False)
-
-	def on_enter(self, event):
-		self.set_tip(event.widget.tooltip)
-
-	def on_leave(self, event):
-		self.set_tip(None)
 
 	def set_save_state(self, st):
 		if st:
