@@ -447,7 +447,7 @@ class MainWindow:
 		self.btn_nos = buttons.nos
 		self.cur_filename = None
 		self.modified = False
-		self.layout = Layout(buttons.num_keys, 4)
+		self.layout = Layout(buttons.num_keys, 16)
 		master.wm_geometry("800x600+0+0")
 		self.master = master
 		self.menu = MainMenu(master, self.on_menu_action)
@@ -455,6 +455,8 @@ class MainWindow:
 
 		self.status = StatusBar(master)
 		self.status.pack(side = BOTTOM, fill = X)
+
+		master.protocol("WM_DELETE_WINDOW", self.on_exit)
 
 		topbar = Frame(master, bd = 1, relief = RAISED)
 		topbar.pack(side = TOP, fill = X)
@@ -469,8 +471,14 @@ class MainWindow:
 		Grid.rowconfigure(fr, 0, weight = 1)
 		ls = OptionMenu(fr, self.layer, *range(0, 16), command = self.on_change_layer)
 		ls.grid(column = 1, row = 0)
-		Grid.columnconfigure(topbar, 0, weight = 1)
-		Grid.columnconfigure(topbar, 1, weight = 1)
+		#p = TooltipButton(fr, text = "+", tooltip = "Add layer", statusbar = self.status,
+		#		command = self.on_add_layer)
+		#p.grid(column = 2, row = 0)
+		#m = TooltipButton(fr, text = "-", tooltip = "Remove layer", statusbar = self.status,
+		#		command = self.on_del_layer)
+		#m.grid(column = 3, row = 0)
+		for i in range(0, 2):
+			Grid.columnconfigure(topbar, i, weight = 1)
 
 		f = Frame(master)
 		f.pack(side = TOP, fill = X)
@@ -499,6 +507,13 @@ class MainWindow:
 				next_button = self.kbframe.next_button
 		)
 		self.on_change_layer(self.layer.get())
+
+	def on_exit(self):
+		if self.modified:
+			cont = self.ask_save()
+			if not cont:
+				return
+		self.master.quit()
 
 	def place_frames(self):
 		self.topframe.place(y = 0, relheight = self.split, relwidth = 1)
@@ -559,8 +574,8 @@ class MainWindow:
 		# reload button props on the new layer
 		self.on_key_chosen(self.kbframe.get_current_btn())
 		if platform_windows():
-			for b in self.kbframe.buttons.values():
-				b._layout_labels()
+			for b in self.btn_nos:
+				self.kbframe._get_btn_widget(b)._layout_labels()
 		self.inhopt.pack_forget()
 		opts = [str(i) for i in range(0, l)]
 		if l == 0:
@@ -572,6 +587,12 @@ class MainWindow:
 		else:
 			self.inh.set(str(self.layout.parents[l]))
 		self.props.set_inheritable(self.inh.get() != "none")
+
+	def on_add_layer(self):
+		pass
+
+	def on_del_layer(self):
+		pass
 
 	def on_menu_action(self, cmd):
 		if cmd == "saveas":
@@ -628,18 +649,14 @@ class MainWindow:
 				if not cont:
 					return
 			# FIXME: take that from xml
-			self.layout = Layout(self.buttons.num_keys, 4)
+			self.layout = Layout(self.buttons.num_keys, 16)
 			self.layer.set(0)
 			self.on_change_layer(0)
 			self.cur_filename = None
 			self.set_save_state(False)
 			self.status.set("Created new layout")
 		elif cmd == "exit":
-			if self.modified:
-				cont = self.ask_save()
-				if not cont:
-					return
-			self.master.destroy()
+			self.on_exit()
 		elif cmd == "program":
 			u = UKBDC()
 			try:
@@ -774,7 +791,7 @@ class StatusBar(Frame):
 		self.last_status = ""
 
 
-tree = ET.parse("ghpad.xml")
+tree = ET.parse("gh60.xml")
 keyboard = tree.getroot()
 w = int(keyboard.attrib['width'])
 h = int(keyboard.attrib['height'])
