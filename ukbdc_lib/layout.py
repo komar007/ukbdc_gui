@@ -14,8 +14,9 @@ def as_unsigned(x):
 		return x
 
 class Action(object):
-	Abs = 0x02
-	Rel = 0x01
+	Abs   = 0x02
+	Rel   = 0x01
+	NoAct = 0x00
 	def __init__(self, kind, arg = 0x00):
 		self.kind = kind
 		self.arg = arg

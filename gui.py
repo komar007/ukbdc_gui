@@ -236,11 +236,176 @@ class KeyboardFrame(Frame):
 			)
 			self._['b_%i' % no] = widget
 
+class ActionChooser(Frame):
+	_action_types = {
+			Action.NoAct: "none",
+			Action.Rel  : "change layer by",
+			Action.Abs  : "go to layer"
+	}
+	def __init__(self, master, on_change):
+		super(ActionChooser, self).__init__(master)
+		self._ = {}
+		self._on_change = on_change
+		self._action_var = IntVar()
+		self._action_var.trace("w", self._on_radio_changed)
+		self._action_arg_var = StringVar()
+		self._action_arg_var.set("0")
+		self._action_arg_var.trace("w", self._on_action_arg_changed)
+		vcmd = (master.register(self._validate_act), '%P')
+		self._['e_action_arg'] = Entry(self, textvariable = self._action_arg_var,
+				validate = "key", validatecommand = vcmd,
+				width = 4, state = DISABLED)
+		self._['e_action_arg'].var = self._action_arg_var
+		self._['e_action_arg'].grid(column = 1, row = 1, rowspan = 2, padx = 8)
+		for i, t in self._action_types.items():
+			r = Radiobutton(self, text = t, value = i, variable = self._action_var)
+			r.grid(column = 0, row = i, sticky = W)
+
+	def _validate_act(self, text):
+		act = self._action_var.get()
+		if len(text) == 0:
+			return True
+		elif act == Action.Rel and text == "-":
+			return True
+		elif act == Action.Abs and text == "-":
+			return False
+		else:
+			try:
+				n = int(text)
+			except:
+				return False
+			if act == Action.Rel:
+				return n >= -16 and n <= 16
+			else:
+				return n >= 0 and n <= 16
+
+	# Whether the argument entry is complete (i. e. not "-" or empty)
+	@property
+	def _action_arg_complete(self):
+		text = self._['e_action_arg'].var.get()
+		try:
+			n = int(text)
+			return True
+		except ValueError:
+			return False
+
+	def _on_radio_changed(self, *unused):
+		no_notify = False
+		entry = self._['e_action_arg']
+		if self._action_var.get() == Action.NoAct:
+			if not self._action_arg_complete:
+				no_notify = True
+				entry.var.set("0")
+		if self._action_var.get() == Action.Abs:
+			try:
+				i = int(entry.var.get())
+			except ValueError:
+				i = 0
+			if i <= 0:
+				no_notify = True
+				entry.var.set("0")
+		self._update_action_arg_entry()
+		entry.focus_set()
+		entry.selection_range(0, END)
+		if not no_notify:
+			self._notify()
+
+	def _on_action_arg_changed(self, *unused_args):
+		if self._action_arg_complete:
+			self._notify()
+
+	def _update_action_arg_entry(self):
+		if self._action_var.get() == Action.NoAct:
+			self._['e_action_arg'].config(state = DISABLED)
+		else:
+			self._['e_action_arg'].config(state = NORMAL)
+
+	def _notify(self):
+		self._on_change()
+
+	# Public API starts here...
+
+	def update_action(self, action):
+		self._action_var.set(action.kind)
+		self._action_arg_var.set(str(action.arg))
+
+	def get_action(self):
+		act = Action(self._action_var.get(), int(self._action_arg_var.get()))
+		return act
+
+class ScancodeEntry(Frame):
+	_wrong_bgcolor = "#FF6D72"
+	def __init__(self, master, on_change):
+		super(ScancodeEntry, self).__init__(master)
+		self._ = {}
+		self._on_change = on_change
+		self._scancode_var = StringVar()
+		self._scancode_var.set("")
+		self._scancode_var.trace("w", self._on_scancode_changed)
+		self._['e_scancode'] = Entry(self, textvariable = self._scancode_var)
+		self._correct_bgcolor = self._['e_scancode'].cget("bg")
+		self._['e_scancode'].bind("<Tab>", self._on_entry_tab)
+		self._['e_scancode'].grid(column = 0, row = 0)
+		self._['l_hints'] = Label(self)
+		self._['l_hints'].grid(column = 1, row = 0)
+		self._hints = []
+		self._scancode = 0
+
+	def _on_entry_tab(self, event):
+		if len(self._hints) == 1 and self._scancode_var.get() != self._hints[0]:
+			self._scancode_var.set(self._hints[0])
+			self._['e_scancode'].icursor(END)
+			self._['e_scancode'].focus_set()
+
+	def _on_scancode_changed(self, *unused):
+		if not self._scancode_correct:
+			self._['e_scancode'].config(bg = self._wrong_bgcolor)
+		else:
+			self._['e_scancode'].config(bg = self._correct_bgcolor)
+			self._scancode = self._scancode_var.get()
+		if len(self._scancode_var.get()) == 0:
+			self._hints = []
+		else:
+			self._hints = list(filter(
+					lambda x: x.startswith(self._scancode_var.get()),
+					mnemonics.values())
+			)
+		self._['l_hints'].config(text = " ".join(self._hints))
+		if self._scancode_correct:
+			self._notify()
+
+	@property
+	def _scancode_correct(self):
+		text = self._scancode_var.get()
+		if len(text) == 0:
+			return True
+		if text[0:2] == "0x":
+			try:
+				return 0 <= int(text, 16) <= 255
+			except ValueError:
+				return False
+		else:
+			valid_mnemonics = mnemonics.values()
+			return text in valid_mnemonics
+
+	def _notify(self):
+		print("should notify")
+
+	# Public API starts here...
+
+	def get_scancode(self):
+		return self._scancode
+
+	def set_scancode(self):
+		pass
+
+
 class PropsFrame(Frame):
 	kinds = ["None", "Change layer by", "Go to layer"]
 	def __init__(self, master, notify = lambda: False, next_button = lambda: False):
 		self.should_notify = False
 		super(PropsFrame, self).__init__(master)
+		self._ = {}
 		self.notify = notify
 		self.next_button = next_button
 		self.widgets = []
@@ -269,41 +434,52 @@ class PropsFrame(Frame):
 		self.lhints.grid(column = 3, row = 1)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
-		l = Label(acts, text = "key press action: ")
-		l.grid(column = 0, row = 0)
-		self.pressaction = IntVar()
-		vcmd = (master.register(lambda x, w = self.pressaction: self.validate_act(w, x)), '%P')
-		self.pressarg = StringVar()
-		self.pressarg.set(0)
-		self.pressarg.trace("w", self.on_props_changed)
-		self.pressnum = Entry(acts, textvariable = self.pressarg, validate = "key",
-				validatecommand = vcmd, width = 4, state = DISABLED)
-		self.pressnum.var = self.pressarg
-		self.pressnum.grid(column = 2, row = 1, rowspan = 2, padx = 8)
-		self.widgets.append(self.pressnum)
-		for i, t in enumerate(self.kinds):
-			r = Radiobutton(acts, text = t, variable = self.pressaction, value = i,
-					command = lambda: self.radio_changed(self.pressaction, self.pressnum))
-			r.grid(column = 1, row = i, sticky = W)
-			self.widgets.append(r)
-		l = Label(acts, text = "key release action: ")
-		l.grid(column = 3, row = 0)
-		self.releaseaction = IntVar()
-		vcmd = (master.register(lambda x, w = self.releaseaction: self.validate_act(w, x)), '%P')
-		self.releasearg = StringVar()
-		self.releasearg.set(0)
-		self.releasearg.trace("w", self.on_props_changed)
-		self.releasenum = Entry(acts, textvariable = self.releasearg, validate = "key",
-				validatecommand = vcmd, width = 4, state = DISABLED)
-		self.releasenum.var = self.releasearg
-		self.releasenum.grid(column = 5, row = 1, rowspan = 2, padx = 8)
-		self.widgets.append(self.releasenum)
-		for i, t in enumerate(self.kinds):
-			r = Radiobutton(acts, text = t, variable = self.releaseaction, value = i,
-					command = lambda: self.radio_changed(self.releaseaction, self.releasenum))
-			r.grid(column = 4, row = i, sticky = W)
-			self.widgets.append(r)
+		#l = Label(acts, text = "key press action: ")
+		#l.grid(column = 0, row = 0)
+		#self.pressaction = IntVar()
+		#vcmd = (master.register(lambda x, w = self.pressaction: self.validate_act(w, x)), '%P')
+		#self.pressarg = StringVar()
+		#self.pressarg.set(0)
+		#self.pressarg.trace("w", self.on_props_changed)
+		#self.pressnum = Entry(acts, textvariable = self.pressarg, validate = "key",
+		#		validatecommand = vcmd, width = 4, state = DISABLED)
+		#self.pressnum.var = self.pressarg
+		#self.pressnum.grid(column = 2, row = 1, rowspan = 2, padx = 8)
+		#self.widgets.append(self.pressnum)
+		#for i, t in enumerate(self.kinds):
+		#	r = Radiobutton(acts, text = t, variable = self.pressaction, value = i,
+		#			command = lambda: self.radio_changed(self.pressaction, self.pressnum))
+		#	r.grid(column = 1, row = i, sticky = W)
+		#	self.widgets.append(r)
+		self._['l_press'] = Label(acts, text = "key press action: ")
+		self._['l_press'].grid(column = 0, row = 0, sticky = N)
+		self._['ac_press'] = ActionChooser(acts, on_change = self._on_action_changed)
+		self._['ac_press'].grid(column = 1, row = 0)
+		self._['l_release'] = Label(acts, text = "key release action: ")
+		self._['l_release'].grid(column = 2, row = 0, sticky = N)
+		self._['ac_release'] = ActionChooser(acts, on_change = self._on_action_changed)
+		self._['ac_release'].grid(column = 3, row = 0)
+		#l = Label(acts, text = "key release action: ")
+		#l.grid(column = 3, row = 0)
+		#self.releaseaction = IntVar()
+		#vcmd = (master.register(lambda x, w = self.releaseaction: self.validate_act(w, x)), '%P')
+		#self.releasearg = StringVar()
+		#self.releasearg.set(0)
+		#self.releasearg.trace("w", self.on_props_changed)
+		#self.releasenum = Entry(acts, textvariable = self.releasearg, validate = "key",
+		#		validatecommand = vcmd, width = 4, state = DISABLED)
+		#self.releasenum.var = self.releasearg
+		#self.releasenum.grid(column = 5, row = 1, rowspan = 2, padx = 8)
+		#self.widgets.append(self.releasenum)
+		#for i, t in enumerate(self.kinds):
+		#	r = Radiobutton(acts, text = t, variable = self.releaseaction, value = i,
+		#			command = lambda: self.radio_changed(self.releaseaction, self.releasenum))
+		#	r.grid(column = 4, row = i, sticky = W)
+		#	self.widgets.append(r)
 		self.should_notify = True
+
+	def _on_action_changed(self):
+		self.on_props_changed()
 
 	def mode_changed(self):
 		if self.mode.get() == 0:
@@ -312,9 +488,6 @@ class PropsFrame(Frame):
 		else:
 			for w in self.widgets:
 				w.config(state = DISABLED)
-		# fix action enties
-		self.update_actions_form(self.pressaction, self.pressnum)
-		self.update_actions_form(self.releaseaction, self.releasenum)
 		if self.should_notify:
 			self.on_props_changed()
 
@@ -333,9 +506,7 @@ class PropsFrame(Frame):
 			)
 		self.lhints.config(text = " ".join(self.hints))
 
-		can_notify = self.scancode_correct(self.scancode.get()) and \
-			self.releasearg.get() not in ["", "-"] and \
-			self.pressarg.get() not in ["", "-"]
+		can_notify = self.scancode_correct(self.scancode.get())
 		if self.should_notify and can_notify:
 			self.notify()
 
@@ -344,30 +515,6 @@ class PropsFrame(Frame):
 			self.scancode.set(self.hints[0])
 			self.scentry.icursor(END)
 			self.scentry.focus_set()
-
-	def radio_changed(self, act, entry):
-		self.update_actions_form(act, entry)
-		if act.get() == 0:
-			self.scentry.focus_set()
-		else:
-			entry.focus_set()
-			entry.selection_range(0, END)
-		if act.get() == Action.Abs:
-			try:
-				i = int(entry.var.get())
-			except ValueError:
-				i = 0
-			if i <= 0:
-				entry.var.set("0")
-		if self.should_notify:
-			self.on_props_changed()
-
-	def update_actions_form(self, act, entry):
-		if act.get() == 0:
-			entry.config(state = DISABLED)
-		else:
-			entry.config(state = NORMAL)
-
 
 	def scancode_correct(self, text):
 		if text[0:2] == "0x":
@@ -379,39 +526,17 @@ class PropsFrame(Frame):
 			valid_mnemonics = mnemonics.values()
 			return text in valid_mnemonics
 
-	def validate_act(self, act, text):
-		a = act.get()
-		if len(text) == 0:
-			return True
-		elif a == Action.Rel and text == "-":
-			return True
-		elif a == Action.Abs and text == "-":
-			return False
-		else:
-			try:
-				n = int(text)
-			except:
-				return False
-			if a == Action.Rel:
-				return n >= -16 and n <= 16
-			else:
-				return n >= 0 and n <= 16
-
 	def load_keydef(self, key):
 		old_should = self.should_notify
 		self.should_notify = False
 		self.scancode.set(key.nicename)
-		self.pressaction.set(key.press.kind)
-		self.pressarg.set(key.press.arg)
-		self.releaseaction.set(key.release.kind)
-		self.releasearg.set(key.release.arg)
+		self._['ac_press'].update_action(key.press)
+		self._['ac_release'].update_action(key.release)
 		if key.inherited:
 			self.mode.set(1)
 		else:
 			self.mode.set(0)
 		self.mode_changed()
-		self.update_actions_form(self.pressaction, self.pressnum)
-		self.update_actions_form(self.releaseaction, self.releasenum)
 		self.should_notify = old_should
 		self.focus()
 
@@ -426,8 +551,8 @@ class PropsFrame(Frame):
 				sc = self.scancode.get()
 		except ValueError:
 			sc = self.scancode.get()
-		pr = Action(self.pressaction.get(), int(self.pressarg.get()))
-		re = Action(self.releaseaction.get(), int(self.releasearg.get()))
+		pr = self._['ac_press'].get_action()
+		re = self._['ac_release'].get_action()
 		return KeyDef(scancode = sc, press = pr, release = re)
 
 	def set_inheritable(self, inh):
@@ -804,6 +929,12 @@ for key in keyboard:
 			int(key.attrib['x']), int(key.attrib['y']))
 
 root = Tk()
+
+#app = ScancodeEntry(root, lambda: 0)
+#app.pack()
+#root.mainloop()
+
+#exit()
 
 app = MainWindow(root, buttons)
 
