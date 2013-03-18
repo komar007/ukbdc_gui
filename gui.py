@@ -236,6 +236,16 @@ class KeyboardFrame(Frame):
 			)
 			self._['b_%i' % no] = widget
 
+# A decorator which switches off notifications before the function is called to prevent
+# notifications in functions which set Tkinter variables
+def no_notify(method):
+	def _decorator(self, *args, **kwargs):
+		old_should = self._should_notify
+		self._should_notify = False
+		method(self, *args, **kwargs)
+		self._should_notify = old_should
+	return _decorator
+
 class ActionChooser(Frame):
 	_action_types = {
 			Action.NoAct: "none",
@@ -245,6 +255,8 @@ class ActionChooser(Frame):
 	def __init__(self, master, on_change):
 		super(ActionChooser, self).__init__(master)
 		self._ = {}
+		self._should_notify = False
+		self._active = True
 		self._on_change = on_change
 		self._action_var = IntVar()
 		self._action_var.trace("w", self._on_radio_changed)
@@ -258,8 +270,9 @@ class ActionChooser(Frame):
 		self._['e_action_arg'].var = self._action_arg_var
 		self._['e_action_arg'].grid(column = 1, row = 1, rowspan = 2, padx = 8)
 		for i, t in self._action_types.items():
-			r = Radiobutton(self, text = t, value = i, variable = self._action_var)
+			r = self._['r_' + str(i)] = Radiobutton(self, text = t, value = i, variable = self._action_var)
 			r.grid(column = 0, row = i, sticky = W)
+		self._should_notify = True
 
 	def _validate_act(self, text):
 		act = self._action_var.get()
@@ -305,8 +318,10 @@ class ActionChooser(Frame):
 				no_notify = True
 				entry.var.set("0")
 		self._update_action_arg_entry()
-		entry.focus_set()
-		entry.selection_range(0, END)
+		# update focus only if the change was because of user, not by parent loading action definition
+		if self._should_notify:
+			entry.focus_set()
+			entry.selection_range(0, END)
 		if not no_notify:
 			self._notify()
 
@@ -321,10 +336,12 @@ class ActionChooser(Frame):
 			self._['e_action_arg'].config(state = NORMAL)
 
 	def _notify(self):
-		self._on_change()
+		if self._should_notify:
+			self._on_change()
 
 	# Public API starts here...
 
+	@no_notify
 	def update_action(self, action):
 		self._action_var.set(action.kind)
 		self._action_arg_var.set(str(action.arg))
@@ -333,50 +350,68 @@ class ActionChooser(Frame):
 		act = Action(self._action_var.get(), int(self._action_arg_var.get()))
 		return act
 
+	@property
+	def active(self):
+		return _active
+
+	@active.setter
+	def active(self, act):
+		if act:
+			self._active = True
+			for w in self._.values():
+				w.config(state = NORMAL)
+		else:
+			self._active = False
+			for w in self._.values():
+				w.config(state = DISABLED)
+
 class ScancodeEntry(Frame):
 	_wrong_bgcolor = "#FF6D72"
 	def __init__(self, master, on_change):
 		super(ScancodeEntry, self).__init__(master)
 		self._ = {}
 		self._on_change = on_change
-		self._scancode_var = StringVar()
-		self._scancode_var.set("")
-		self._scancode_var.trace("w", self._on_scancode_changed)
-		self._['e_scancode'] = Entry(self, textvariable = self._scancode_var)
-		self._correct_bgcolor = self._['e_scancode'].cget("bg")
-		self._['e_scancode'].bind("<Tab>", self._on_entry_tab)
-		self._['e_scancode'].grid(column = 0, row = 0)
+		self._active = True
+		self._should_notify = False
+		self._mnemonic_var = StringVar()
+		self._mnemonic_var.set("")
+		self._mnemonic_var.trace("w", self._on_mnemonic_changed)
+		self._['e_mnemonic'] = Entry(self, textvariable = self._mnemonic_var)
+		self._correct_bgcolor = self._['e_mnemonic'].cget("bg")
+		self._['e_mnemonic'].bind("<FocusOut>", self._on_entry_tab)
+		self._['e_mnemonic'].grid(column = 0, row = 0)
 		self._['l_hints'] = Label(self)
 		self._['l_hints'].grid(column = 1, row = 0)
 		self._hints = []
-		self._scancode = 0
+		self._mnemonic = ""
+		self._should_notify = True
 
 	def _on_entry_tab(self, event):
-		if len(self._hints) == 1 and self._scancode_var.get() != self._hints[0]:
-			self._scancode_var.set(self._hints[0])
-			self._['e_scancode'].icursor(END)
-			self._['e_scancode'].focus_set()
+		if len(self._hints) == 1 and self._mnemonic_var.get() != self._hints[0]:
+			self._mnemonic_var.set(self._hints[0])
+			self._['e_mnemonic'].icursor(END)
+			self._['e_mnemonic'].focus_set()
 
-	def _on_scancode_changed(self, *unused):
-		if not self._scancode_correct:
-			self._['e_scancode'].config(bg = self._wrong_bgcolor)
+	def _on_mnemonic_changed(self, *unused):
+		if not self._mnemonic_correct:
+			self._['e_mnemonic'].config(bg = self._wrong_bgcolor)
 		else:
-			self._['e_scancode'].config(bg = self._correct_bgcolor)
-			self._scancode = self._scancode_var.get()
-		if len(self._scancode_var.get()) == 0:
+			self._['e_mnemonic'].config(bg = self._correct_bgcolor)
+			self._mnemonic = self._mnemonic_var.get()
+		if len(self._mnemonic_var.get()) == 0:
 			self._hints = []
 		else:
 			self._hints = list(filter(
-					lambda x: x.startswith(self._scancode_var.get()),
+					lambda x: x.startswith(self._mnemonic_var.get()),
 					mnemonics.values())
 			)
 		self._['l_hints'].config(text = " ".join(self._hints))
-		if self._scancode_correct:
+		if self._mnemonic_correct:
 			self._notify()
 
 	@property
-	def _scancode_correct(self):
-		text = self._scancode_var.get()
+	def _mnemonic_correct(self):
+		text = self._mnemonic_var.get()
 		if len(text) == 0:
 			return True
 		if text[0:2] == "0x":
@@ -389,15 +424,48 @@ class ScancodeEntry(Frame):
 			return text in valid_mnemonics
 
 	def _notify(self):
-		print("should notify")
+		if self._should_notify:
+			self._on_change()
 
 	# Public API starts here...
 
-	def get_scancode(self):
-		return self._scancode
+	@property
+	def scancode(self):
+		if self._mnemonic == "":
+			return 0
+		elif self._mnemonic.startswith("0x"):
+			return int(self._mnemonic, 16)
+		else:
+			return scancodes[self._mnemonic]
 
-	def set_scancode(self):
-		pass
+	@scancode.setter
+	@no_notify
+	def scancode(self, scancode):
+		if scancode == 0:
+			self._mnemonic = ""
+		else:
+			try:
+				self._mnemonic = mnemonics[scancode]
+			except KeyError:
+				self._mnemonic = hex(scancode)
+		self._mnemonic_var.set(self._mnemonic)
+
+	def focus(self):
+		self._['e_mnemonic'].selection_range(0, END)
+		self._['e_mnemonic'].focus_set()
+
+	@property
+	def active(self):
+		return self._active
+
+	@active.setter
+	def active(self, act):
+		if act:
+			self._active = True
+			self._['e_mnemonic'].config(state = NORMAL)
+		else:
+			self._active = False
+			self._['e_mnemonic'].config(state = DISABLED)
 
 
 class PropsFrame(Frame):
@@ -419,19 +487,12 @@ class PropsFrame(Frame):
 		for i, t in enumerate(["defined", "inherited"]):
 			r = Radiobutton(top, text = t, variable = self.mode, value = i,
 					command = self.mode_changed)
-			r.grid(column = 1+i, row = 0, sticky = W)
+			r.grid(column = 1+i, row = 0)
 			self.moderadios.append(r)
 		l = Label(top, text = "scancode: ")
 		l.grid(column = 0, row = 1)
-		self.scancode = StringVar()
-		self.scancode.set(0)
-		self.scancode.trace("w", self.on_props_changed)
-		self.scentry = Entry(top, textvariable = self.scancode)
-		self.scentry.bind("<FocusOut>", self.on_scentry_tab)
-		self.scentry.grid(column = 1, row = 1, columnspan = 2)
-		self.widgets.append(self.scentry)
-		self.lhints = Label(top)
-		self.lhints.grid(column = 3, row = 1)
+		self.scancode = ScancodeEntry(top, self._on_props_changed)
+		self.scancode.grid(column = 1, row = 1, columnspan = 2)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
 		#l = Label(acts, text = "key press action: ")
@@ -453,11 +514,11 @@ class PropsFrame(Frame):
 		#	self.widgets.append(r)
 		self._['l_press'] = Label(acts, text = "key press action: ")
 		self._['l_press'].grid(column = 0, row = 0, sticky = N)
-		self._['ac_press'] = ActionChooser(acts, on_change = self._on_action_changed)
+		self._['ac_press'] = ActionChooser(acts, on_change = self._on_props_changed)
 		self._['ac_press'].grid(column = 1, row = 0)
 		self._['l_release'] = Label(acts, text = "key release action: ")
 		self._['l_release'].grid(column = 2, row = 0, sticky = N)
-		self._['ac_release'] = ActionChooser(acts, on_change = self._on_action_changed)
+		self._['ac_release'] = ActionChooser(acts, on_change = self._on_props_changed)
 		self._['ac_release'].grid(column = 3, row = 0)
 		#l = Label(acts, text = "key release action: ")
 		#l.grid(column = 3, row = 0)
@@ -478,58 +539,25 @@ class PropsFrame(Frame):
 		#	self.widgets.append(r)
 		self.should_notify = True
 
-	def _on_action_changed(self):
-		self.on_props_changed()
-
 	def mode_changed(self):
 		if self.mode.get() == 0:
-			for w in self.widgets:
-				w.config(state = NORMAL)
+			for w in self._.values():
+				w.active = True
+			self.scancode.active = True
 		else:
-			for w in self.widgets:
-				w.config(state = DISABLED)
+			for w in self._.values():
+				w.active = False
+			self.scancode.active = False
 		if self.should_notify:
-			self.on_props_changed()
+			self._on_props_changed()
 
-	def on_props_changed(self, *args):
-		if not self.scancode_correct(self.scancode.get()):
-			self.scentry.config(bg = "#FF6D72")
-		else:
-			self.scentry.config(bg = self.cget("bg"))
-
-		if len(self.scancode.get()) == 0:
-			self.hints = []
-		else:
-			self.hints = list(filter(
-					lambda x: x.startswith(self.scancode.get()),
-					mnemonics.values())
-			)
-		self.lhints.config(text = " ".join(self.hints))
-
-		can_notify = self.scancode_correct(self.scancode.get())
-		if self.should_notify and can_notify:
-			self.notify()
-
-	def on_scentry_tab(self, event):
-		if len(self.hints) == 1 and self.scancode.get() != self.hints[0]:
-			self.scancode.set(self.hints[0])
-			self.scentry.icursor(END)
-			self.scentry.focus_set()
-
-	def scancode_correct(self, text):
-		if text[0:2] == "0x":
-			try:
-				return 0 <= int(text, 16) <= 255
-			except ValueError:
-				return False
-		else:
-			valid_mnemonics = mnemonics.values()
-			return text in valid_mnemonics
+	def _on_props_changed(self, *args):
+		self.notify()
 
 	def load_keydef(self, key):
 		old_should = self.should_notify
 		self.should_notify = False
-		self.scancode.set(key.nicename)
+		self.scancode.scancode = key.scancode
 		self._['ac_press'].update_action(key.press)
 		self._['ac_release'].update_action(key.release)
 		if key.inherited:
@@ -538,19 +566,12 @@ class PropsFrame(Frame):
 			self.mode.set(0)
 		self.mode_changed()
 		self.should_notify = old_should
-		self.focus()
+		self.scancode.focus()
 
 	def get_keydef(self):
 		if self.mode.get() == 1:
 			return None
-		scancode = self.scancode.get()
-		try:
-			if scancode[0:2] == "0x":
-				sc = int(self.scancode.get(), 16)
-			else:
-				sc = self.scancode.get()
-		except ValueError:
-			sc = self.scancode.get()
+		sc = self.scancode.scancode
 		pr = self._['ac_press'].get_action()
 		re = self._['ac_release'].get_action()
 		return KeyDef(scancode = sc, press = pr, release = re)
@@ -560,10 +581,6 @@ class PropsFrame(Frame):
 			self.moderadios[1].config(state = NORMAL)
 		else:
 			self.moderadios[1].config(state = DISABLED)
-
-	def focus(self):
-		self.scentry.selection_range(0, END)
-		self.scentry.focus_set()
 
 class MainWindow:
 	def __init__(self, master, buttons):
