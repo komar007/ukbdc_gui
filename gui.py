@@ -339,6 +339,15 @@ class ActionChooser(Frame):
 		if self._should_notify:
 			self._on_change()
 
+	def config(self, *args, **kwargs):
+		if 'state' in kwargs:
+			if kwargs['state'] == DISABLED:
+				self.active = False
+			else:
+				self.active = True
+			del kwargs['state']
+		super(ActionChooser, self).config(*args, **kwargs)
+
 	# Public API starts here...
 
 	@no_notify
@@ -427,6 +436,15 @@ class ScancodeEntry(Frame):
 		if self._should_notify:
 			self._on_change()
 
+	def config(self, *args, **kwargs):
+		if 'state' in kwargs:
+			if kwargs['state'] == DISABLED:
+				self.active = False
+			else:
+				self.active = True
+			del kwargs['state']
+		super(ScancodeEntry, self).config(*args, **kwargs)
+
 	# Public API starts here...
 
 	@property
@@ -462,10 +480,12 @@ class ScancodeEntry(Frame):
 	def active(self, act):
 		if act:
 			self._active = True
-			self._['e_mnemonic'].config(state = NORMAL)
+			for w in self._.values():
+				w.config(state = NORMAL)
 		else:
 			self._active = False
-			self._['e_mnemonic'].config(state = DISABLED)
+			for w in self._.values():
+				w.config(state = DISABLED)
 
 
 class PropsFrame(Frame):
@@ -489,10 +509,10 @@ class PropsFrame(Frame):
 					command = self.mode_changed)
 			r.grid(column = 1+i, row = 0)
 			self.moderadios.append(r)
-		l = Label(top, text = "scancode: ")
-		l.grid(column = 0, row = 1)
-		self.scancode = ScancodeEntry(top, self._on_props_changed)
-		self.scancode.grid(column = 1, row = 1, columnspan = 2)
+		self._['l_scancode'] = Label(top, text = "scancode: ")
+		self._['l_scancode'].grid(column = 0, row = 1)
+		self._['e_scancode'] = ScancodeEntry(top, self._on_props_changed)
+		self._['e_scancode'].grid(column = 1, row = 1, columnspan = 2)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
 		#l = Label(acts, text = "key press action: ")
@@ -542,12 +562,10 @@ class PropsFrame(Frame):
 	def mode_changed(self):
 		if self.mode.get() == 0:
 			for w in self._.values():
-				w.active = True
-			self.scancode.active = True
+				w.config(state = NORMAL)
 		else:
 			for w in self._.values():
-				w.active = False
-			self.scancode.active = False
+				w.config(state = DISABLED)
 		if self.should_notify:
 			self._on_props_changed()
 
@@ -557,7 +575,7 @@ class PropsFrame(Frame):
 	def load_keydef(self, key):
 		old_should = self.should_notify
 		self.should_notify = False
-		self.scancode.scancode = key.scancode
+		self._['e_scancode'].scancode = key.scancode
 		self._['ac_press'].update_action(key.press)
 		self._['ac_release'].update_action(key.release)
 		if key.inherited:
@@ -566,12 +584,12 @@ class PropsFrame(Frame):
 			self.mode.set(0)
 		self.mode_changed()
 		self.should_notify = old_should
-		self.scancode.focus()
+		self._['e_scancode'].focus()
 
 	def get_keydef(self):
 		if self.mode.get() == 1:
 			return None
-		sc = self.scancode.scancode
+		sc = self._['e_scancode'].scancode
 		pr = self._['ac_press'].get_action()
 		re = self._['ac_release'].get_action()
 		return KeyDef(scancode = sc, press = pr, release = re)
