@@ -489,7 +489,6 @@ class ScancodeEntry(Frame):
 
 
 class PropsFrame(Frame):
-	kinds = ["None", "Change layer by", "Go to layer"]
 	def __init__(self, master, notify = lambda: False, next_button = lambda: False):
 		self.should_notify = False
 		super(PropsFrame, self).__init__(master)
@@ -506,7 +505,7 @@ class PropsFrame(Frame):
 		self.moderadios = []
 		for i, t in enumerate(["defined", "inherited"]):
 			r = Radiobutton(top, text = t, variable = self.mode, value = i,
-					command = self.mode_changed)
+					command = self._on_mode_changed)
 			r.grid(column = 1+i, row = 0)
 			self.moderadios.append(r)
 		self._['l_scancode'] = Label(top, text = "scancode: ")
@@ -515,23 +514,6 @@ class PropsFrame(Frame):
 		self._['e_scancode'].grid(column = 1, row = 1, columnspan = 2)
 		acts = Frame(self)
 		acts.pack(side = TOP, fill = X)
-		#l = Label(acts, text = "key press action: ")
-		#l.grid(column = 0, row = 0)
-		#self.pressaction = IntVar()
-		#vcmd = (master.register(lambda x, w = self.pressaction: self.validate_act(w, x)), '%P')
-		#self.pressarg = StringVar()
-		#self.pressarg.set(0)
-		#self.pressarg.trace("w", self.on_props_changed)
-		#self.pressnum = Entry(acts, textvariable = self.pressarg, validate = "key",
-		#		validatecommand = vcmd, width = 4, state = DISABLED)
-		#self.pressnum.var = self.pressarg
-		#self.pressnum.grid(column = 2, row = 1, rowspan = 2, padx = 8)
-		#self.widgets.append(self.pressnum)
-		#for i, t in enumerate(self.kinds):
-		#	r = Radiobutton(acts, text = t, variable = self.pressaction, value = i,
-		#			command = lambda: self.radio_changed(self.pressaction, self.pressnum))
-		#	r.grid(column = 1, row = i, sticky = W)
-		#	self.widgets.append(r)
 		self._['l_press'] = Label(acts, text = "key press action: ")
 		self._['l_press'].grid(column = 0, row = 0, sticky = N)
 		self._['ac_press'] = ActionChooser(acts, on_change = self._on_props_changed)
@@ -540,26 +522,9 @@ class PropsFrame(Frame):
 		self._['l_release'].grid(column = 2, row = 0, sticky = N)
 		self._['ac_release'] = ActionChooser(acts, on_change = self._on_props_changed)
 		self._['ac_release'].grid(column = 3, row = 0)
-		#l = Label(acts, text = "key release action: ")
-		#l.grid(column = 3, row = 0)
-		#self.releaseaction = IntVar()
-		#vcmd = (master.register(lambda x, w = self.releaseaction: self.validate_act(w, x)), '%P')
-		#self.releasearg = StringVar()
-		#self.releasearg.set(0)
-		#self.releasearg.trace("w", self.on_props_changed)
-		#self.releasenum = Entry(acts, textvariable = self.releasearg, validate = "key",
-		#		validatecommand = vcmd, width = 4, state = DISABLED)
-		#self.releasenum.var = self.releasearg
-		#self.releasenum.grid(column = 5, row = 1, rowspan = 2, padx = 8)
-		#self.widgets.append(self.releasenum)
-		#for i, t in enumerate(self.kinds):
-		#	r = Radiobutton(acts, text = t, variable = self.releaseaction, value = i,
-		#			command = lambda: self.radio_changed(self.releaseaction, self.releasenum))
-		#	r.grid(column = 4, row = i, sticky = W)
-		#	self.widgets.append(r)
 		self.should_notify = True
 
-	def mode_changed(self):
+	def _on_mode_changed(self):
 		if self.mode.get() == 0:
 			for w in self._.values():
 				w.config(state = NORMAL)
@@ -582,7 +547,7 @@ class PropsFrame(Frame):
 			self.mode.set(1)
 		else:
 			self.mode.set(0)
-		self.mode_changed()
+		self._on_mode_changed()
 		self.should_notify = old_should
 		self._['e_scancode'].focus()
 
@@ -649,6 +614,10 @@ class MainWindow:
 		self.inhopt = OptionMenu(f, self.inh, "none", command = self.on_change_inh)
 		self.inhopt.pack(side = LEFT)
 		self.layprops = f
+		i = TooltipButton(f, text = "inherit all", tooltip = "Make all keys on this layer inherited", statusbar = self.status,
+				command = self.on_inherit_button_clicked)
+		i.pack(side = RIGHT)
+		self.inherit_btn = i
 
 		self.bottomframe = Frame(master, bd = 1, relief = SUNKEN)
 
@@ -667,6 +636,16 @@ class MainWindow:
 				next_button = self.kbframe.next_button
 		)
 		self.on_change_layer(self.layer.get())
+
+	def on_inherit_button_clicked(self):
+		ans = askyesno("Inherit all keys?", "All key definitions on this layer will be lost. Are you sure?")
+		if not ans:
+			return
+		for i in self.btn_nos :
+			b = self.layout[self.layer.get(), i]
+			b.inherited = True
+			self.kbframe.update_button(i, b)
+			self.props.load_keydef(b)
 
 	def on_exit(self):
 		if self.modified:
@@ -725,6 +704,10 @@ class MainWindow:
 			self.set_save_state(True)
 
 	def on_change_layer(self, l):
+		if l == 0:
+			self.inherit_btn.config(state = DISABLED)
+		else:
+			self.inherit_btn.config(state = NORMAL)
 		for b in self.btn_nos:
 			try:
 				kd = self.layout[l, b]

@@ -78,6 +78,10 @@ class KeyDef(object):
 	def inherited(self):
 		return self._inherited
 
+	@inherited.setter
+	def inherited(self, val):
+		self._inherited = val
+
 	def binary(self, fordevice):
 		if self.inherited and not fordevice:
 			return b'\xff\xff\xff\xff'
