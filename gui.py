@@ -4,6 +4,7 @@ from tkinter.filedialog import *
 from tkinter.messagebox import *
 import sys
 import xml.etree.ElementTree as ET
+import hashlib
 
 from ukbdc_lib.layout import *
 from ukbdc_lib import UKBDC, USBError
@@ -27,8 +28,8 @@ class KeyButton(Button):
 	if platform_windows():
 		_ahibgcol = _hibgcol
 
-	def __init__(self, master, number, command = lambda: False):
-		super(KeyButton, self).__init__(master, command = self._on_click)
+	def __init__(self, master, number, command = lambda: False, *args, **kwargs):
+		super(KeyButton, self).__init__(master, command = self._on_click, *args, **kwargs)
 		self._ = {} # subwidgets
 		self._mouse_over = False
 		self._number = number
@@ -39,11 +40,11 @@ class KeyButton(Button):
 		self.bind("<Enter>", self._on_enter)
 		# make labels
 		self._['l_no'] = Label(self, text = self.number,
-				fg = self._nocol, font = self._labfont)
+				fg = self._nocol, bg = self._bgcol, font = self._labfont)
 		self._['l_pr'] = Label(self, text = "",
-				fg = self._prcol, font = self._labfont)
+				fg = self._prcol, bg = self._bgcol, font = self._labfont)
 		self._['l_re'] = Label(self, text = "",
-				fg = self._recol, font = self._labfont)
+				fg = self._recol, bg = self._bgcol, font = self._labfont)
 		# make sure clicking on labels works
 		for label in self._.values():
 			label.bind("<Button-1>", lambda x: self.invoke())
@@ -147,7 +148,7 @@ class KeyButton(Button):
 			self.config(fg = self._inhfgcol, relief = SUNKEN)
 			self._['l_no'].config(fg = self._inhfgcol)
 		else:
-			self.config(fg = self._fgcol, relief = RAISED)
+			self.config(fg = self._fgcol, bg = self._bgcol, relief = RAISED)
 			self._['l_no'].config(fg = self._nocol)
 		self._update_press_label(kd.press, kd.inherited)
 		self._update_release_label(kd.release, kd.inherited)
@@ -798,6 +799,43 @@ class MainWindow:
 			self.cur_filename = None
 			self.set_save_state(False)
 			self.status.set("Created new layout")
+		elif cmd == "generate":
+			fname = asksaveasfilename(filetypes =
+					(("iHex files", "*.hex"), ("All files", "*.*"))
+			)
+			if fname == "":
+				return
+			fi = "ukbdc_gh60-0.2_rc2.hex"
+			try:
+				f = open(fi, "r")
+				firmware = f.readlines()
+				f.close()
+			except Exception as e:
+				self.status.set("Failed to read firmware file %s: %s!" % (fi, str(e)))
+			blob = "".join(firmware)
+			h = hashlib.sha1(bytes(blob, encoding="utf-8")).hexdigest()
+			if h != "22b1fdf1bbf6b8dce8d9a5ba3bf91f842ec067f8":
+				self.status.set("Corrupted firmware file %s!" % fi)
+				return
+
+			b = self.layout.binary(fordevice = True)
+			chunks = [b[i:i+16] for i in range(0, len(b), 16)]
+			lines = []
+			for i, chunk in enumerate(chunks):
+				data = "".join(map(lambda b: "%.2X" % b, chunk))
+				addr = 0x2700+16*i
+				chksum = ((((sum(chunk)+len(chunk)+(addr&0xFF)+(addr>>8)) & 0xFF) ^ 0xFF) + 1) & 0xFF
+				l = ":%.2X%.4X00%s%.2X\n" % (len(chunk), addr, data, chksum)
+				lines.append(l)
+			output = firmware[:-1] + lines + [firmware[-1]]
+			output = "".join(output)
+			try:
+				f = open(fname, "w")
+				f.write(output)
+				f.close()
+				self.status.set("Generated firmware %s." % fname)
+			except Exception as e:
+				self.status.set("Failed to write file %s: %s!" % (fname, str(e)))
 		elif cmd == "exit":
 			self.on_exit()
 		elif cmd == "program":
@@ -833,6 +871,7 @@ class MainMenu(Menu):
 		self.filemenu.add_command(label = "Open...", command = lambda: command("open"))
 		self.filemenu.add_command(label = "Save", command = lambda: command("save"))
 		self.filemenu.add_command(label = "Save as...", command = lambda: command("saveas"))
+		self.filemenu.add_command(label = "Generate firmware...", command = lambda: command("generate"))
 		self.filemenu.add_separator()
 		self.filemenu.add_command(label = "Exit", command = lambda: command("exit"))
 		self.set_save_state(False)
