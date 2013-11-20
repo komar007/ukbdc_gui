@@ -805,7 +805,7 @@ class MainWindow:
 			)
 			if fname == "":
 				return
-			fi = "ukbdc_gh60-0.2_rc2.hex"
+			fi = "base_firmware.hex"
 			try:
 				f = open(fi, "r")
 				firmware = f.readlines()
@@ -814,9 +814,9 @@ class MainWindow:
 				self.status.set("Failed to read firmware file %s: %s!" % (fi, str(e)))
 			blob = "".join(firmware)
 			h = hashlib.sha1(bytes(blob, encoding="utf-8")).hexdigest()
-			if h != "22b1fdf1bbf6b8dce8d9a5ba3bf91f842ec067f8":
-				self.status.set("Corrupted firmware file %s!" % fi)
-				return
+			#if h != "22b1fdf1bbf6b8dce8d9a5ba3bf91f842ec067f8":
+			#	self.status.set("Corrupted firmware file %s!" % fi)
+			#	return
 
 			b = self.layout.binary(fordevice = True)
 			chunks = [b[i:i+16] for i in range(0, len(b), 16)]
@@ -843,7 +843,6 @@ class MainWindow:
 			try:
 				binary = self.layout.binary(fordevice = True)
 				u.attach()
-				u.reset()
 				u.program_layout(binary)
 				u.detach()
 				self.status.set("Programmed %i bytes of layout" % len(binary))

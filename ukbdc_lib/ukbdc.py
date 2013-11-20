@@ -120,14 +120,12 @@ class UKBDC(object):
 
 	def attach(self):
 		self.dev = usb.core.find(
-				find_all = True,
 				idVendor = self.vendorId,
 				idProduct = self.productId
 		)
-		if self.dev == []:
+		if self.dev is None:
 			raise RuntimeError("no device found")
 		try:
-			self.dev = self.dev[0]
 			usb.util.claim_interface(self.dev, self.interface)
 		except usb.core.USBError:
 			self.dev.detach_kernel_driver(self.interface)
@@ -171,6 +169,11 @@ class UKBDC(object):
 		msg.set_packet_size(self.epout.wMaxPacketSize)
 		for packet in msg:
 			self.write_packet(packet)
+		self.wait_end_execute()
+
+	def wait_end_execute(self):
+		while self.status() == Status.EXECUTING:
+			pass
 
 	def dfu(self):
 		self.send(Dfu())
@@ -181,8 +184,6 @@ class UKBDC(object):
 		for no, page in enumerate(pages):
 			m = WritePage(no, page)
 			self.send(m)
-			while self.status() == Status.EXECUTING:
-				pass
 			s = self.status()
 			if s != Status.IDLE:
 				raise RuntimeError("device returned status: %s" % Status.name(s))
