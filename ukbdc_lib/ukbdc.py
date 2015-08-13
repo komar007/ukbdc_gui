@@ -130,7 +130,12 @@ class UKBDC(object):
 		except usb.core.USBError:
 			self.dev.detach_kernel_driver(self.interface)
 		config = self.dev[0]
-		iface = config[self.interface, 0]
+		iface = None
+		for i in config:
+                        if i.bInterfaceNumber == self.interface:
+                                iface = i
+		if not iface:
+                        raise RuntimeError("Interface number {} not found".format(self.interface))
 		self.epin = usb.util.find_descriptor(iface, custom_match = \
 				lambda e: usb.util.endpoint_direction(e.bEndpointAddress) == \
 					usb.util.ENDPOINT_IN)
